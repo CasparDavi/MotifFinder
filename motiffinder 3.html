@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motif Finder v0.1.1</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --bg-panel: #161a21;
+    --bg-elevated: #1d222b;
+    --fg: #d4d7dd;
+    --fg-dim: #8a91a0;
+    --fg-mute: #5a6170;
+    --accent: #7ab8f5;
+    --accent-dim: #4a7ab5;
+    --ok: #81c784;
+    --warn: #ffb74d;
+    --err: #e85a4f;
+    --border: #262b34;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+  header .version {
+    color: var(--accent);
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+  }
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px 20px 120px;
+  }
+  .load-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--fg-dim);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--bg-panel);
+  }
+  .dropzone:hover, .dropzone.dragging {
+    border-color: var(--accent);
+    background: var(--bg-elevated);
+    color: var(--fg);
+  }
+  .dropzone input[type=file] { display: none; }
+  .dropzone .main-line {
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  .dropzone .sub-line {
+    font-size: 12px;
+    color: var(--fg-mute);
+  }
+  .accession-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: var(--bg-panel);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .accession-row label {
+    font-size: 12px;
+    color: var(--fg-dim);
+    white-space: nowrap;
+  }
+  .accession-row select, .accession-row input, .accession-row button {
+    background: var(--bg-elevated);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .accession-row input {
+    flex: 1;
+    font-family: ui-monospace, monospace;
+  }
+  .accession-row button {
+    cursor: pointer;
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+  .accession-row button:hover { background: var(--accent-dim); color: var(--bg); }
+  .accession-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status {
+    margin-top: 16px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.info { background: rgba(122, 184, 245, 0.1); border-left: 3px solid var(--accent); }
+  .status.ok { background: rgba(129, 199, 132, 0.1); border-left: 3px solid var(--ok); }
+  .status.warn { background: rgba(255, 183, 77, 0.1); border-left: 3px solid var(--warn); }
+  .status.err { background: rgba(232, 90, 79, 0.1); border-left: 3px solid var(--err); }
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .progress-bar > div {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.2s;
+  }
+  .genome-info {
+    margin-top: 24px;
+    background: var(--bg-panel);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    display: none;
+  }
+  .genome-info.show { display: block; }
+  .genome-info h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .info-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 18px;
+    font-size: 13px;
+  }
+  .info-grid .k { color: var(--fg-dim); }
+  .info-grid .v { font-family: ui-monospace, monospace; color: var(--fg); }
+
+  /* Debug Panel */
+  #debug-panel {
+    position: fixed;
+    bottom: 0; right: 0;
+    width: 380px;
+    max-width: 100vw;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+    z-index: 1000;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    max-height: 60vh;
+    transition: transform 0.2s;
+  }
+  #debug-panel.collapsed {
+    transform: translateY(calc(100% - 32px));
+  }
+  #debug-panel .dbg-header {
+    padding: 6px 12px;
+    background: var(--bg-elevated);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--fg-dim);
+    user-select: none;
+  }
+  #debug-panel .dbg-header .dbg-title { color: var(--accent); letter-spacing: 0.5px; }
+  #debug-panel .dbg-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  #debug-panel .dbg-actions button {
+    background: var(--bg-elevated);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  #debug-panel .dbg-actions button:hover { border-color: var(--accent); color: var(--accent); }
+  #debug-panel .dbg-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    max-height: 300px;
+  }
+  #debug-panel .dbg-log .l-info { color: var(--fg); }
+  #debug-panel .dbg-log .l-ok { color: var(--ok); }
+  #debug-panel .dbg-log .l-warn { color: var(--warn); }
+  #debug-panel .dbg-log .l-err { color: var(--err); }
+  #debug-panel .dbg-log .l-ts { color: var(--fg-mute); margin-right: 6px; }
+  #debug-panel .dbg-log pre {
+    margin: 4px 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Motif Finder</h1>
+  <span class="version" id="version-tag">v0.1.1</span>
+</header>
+
+<main>
+  <div class="load-section">
+    <label class="dropzone" id="dropzone">
+      <div class="main-line">Datei hierher ziehen oder tappen zum Auswählen</div>
+      <div class="sub-line">GenBank (.gb, .gbk, .gbff), EMBL (.embl), FASTA (.fa, .fasta, .fna) + GFF (.gff, .gff3)</div>
+      <input type="file" id="file-input" accept=".gb,.gbk,.gbff,.embl,.fa,.fasta,.fna,.gff,.gff3,.txt" multiple>
+    </label>
+
+    <div class="accession-row">
+      <label>Accession:</label>
+      <select id="source-select">
+        <option value="auto">Auto</option>
+        <option value="ncbi">NCBI</option>
+        <option value="ena">ENA (EBI)</option>
+      </select>
+      <input type="text" id="accession-input" placeholder="z.B. NC_000964.3" spellcheck="false" autocapitalize="off" autocorrect="off">
+      <button id="accession-fetch">Laden</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="genome-info" id="genome-info">
+    <h2>Geladenes Genom</h2>
+    <div class="info-grid" id="info-grid"></div>
+  </div>
+</main>
+
+<div id="debug-panel" class="collapsed">
+  <div class="dbg-header" id="dbg-toggle">
+    <span class="dbg-title">DEBUG</span>
+    <span id="dbg-chevron">▲</span>
+  </div>
+  <div class="dbg-actions">
+    <button data-action="stats">Stats</button>
+    <button data-action="getseq">Sequenz</button>
+    <button data-action="revcomp">RevComp</button>
+    <button data-action="listgenes">Gene</button>
+    <button data-action="parsertest">Parser-Test</button>
+    <button data-action="clear">Clear</button>
+  </div>
+  <div class="dbg-log" id="dbg-log"></div>
+</div>
+
+<!-- Eruda für volles DevTools bei ?debug -->
+<script>
+  if (location.search.indexOf('debug') !== -1) {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/eruda';
+    s.onload = function() { if (window.eruda) eruda.init(); };
+    document.body.appendChild(s);
+  }
+</script>
+
+<script>
+// ============================================================================
+// Motif Finder v0.1
+// Infrastruktur-Release: Parser (GenBank, EMBL, FASTA+GFF), 2bit-Backend
+// ============================================================================
+
+const VERSION = 'v0.1.1';
+
+// ---------------------------------------------------------------------------
+// Logging
+// ---------------------------------------------------------------------------
+const dbgLog = document.getElementById('dbg-log');
+function log(msg, level) {
+  level = level || 'info';
+  const ts = new Date().toTimeString().split(' ')[0];
+  const div = document.createElement('div');
+  div.className = 'l-' + level;
+  div.innerHTML = '<span class="l-ts">' + ts + '</span>' + escapeHtml(msg);
+  dbgLog.appendChild(div);
+  dbgLog.scrollTop = dbgLog.scrollHeight;
+  if (level === 'err') console.error(msg);
+  else if (level === 'warn') console.warn(msg);
+  else console.log(msg);
+}
+function logPre(msg) {
+  const div = document.createElement('div');
+  div.className = 'l-info';
+  const pre = document.createElement('pre');
+  pre.textContent = msg;
+  div.appendChild(pre);
+  dbgLog.appendChild(div);
+  dbgLog.scrollTop = dbgLog.scrollHeight;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function setStatus(msg, level, showProgress) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (level || 'info');
+  el.innerHTML = escapeHtml(msg) + (showProgress ? '<div class="progress-bar"><div id="progress-fill"></div></div>' : '');
+}
+function clearStatus() {
+  document.getElementById('status').className = 'status';
+}
+function setProgress(pct) {
+  const el = document.getElementById('progress-fill');
+  if (el) el.style.width = pct + '%';
+}
+
+// ---------------------------------------------------------------------------
+// 2bit Backend
+//   Eigenes schlankes Format. Header: [4 bytes length LE uint32]
+//   Payload: ceil(length/4) bytes, 2 bits pro Base (A=00 C=01 G=10 T=11)
+//   N-Blöcke: separate Liste [[start, len], ...]
+//   Soft-masked: nicht in v0.1
+// ---------------------------------------------------------------------------
+const BASE_TO_BITS = { A: 0, C: 1, G: 2, T: 3 };
+const BITS_TO_BASE = ['A', 'C', 'G', 'T'];
+const COMPLEMENT = { A: 'T', T: 'A', C: 'G', G: 'C', N: 'N',
+                     a: 't', t: 'a', c: 'g', g: 'c', n: 'n',
+                     R: 'Y', Y: 'R', S: 'S', W: 'W', K: 'M', M: 'K',
+                     B: 'V', V: 'B', D: 'H', H: 'D' };
+
+class TwoBit {
+  constructor(sequence) {
+    const upper = sequence.toUpperCase();
+    this.length = upper.length;
+    const bytes = new Uint8Array(Math.ceil(this.length / 4));
+    const nBlocks = [];
+    let inN = false, nStart = 0;
+    for (let i = 0; i < this.length; i++) {
+      const c = upper[i];
+      const bits = BASE_TO_BITS[c];
+      if (bits === undefined) {
+        // Non-ACGT. Als A speichern, in N-Block vermerken (einheitlich inkl. IUPAC).
+        bytes[i >> 2] |= 0 << ((3 - (i & 3)) * 2);
+        if (!inN) { inN = true; nStart = i; }
+      } else {
+        bytes[i >> 2] |= bits << ((3 - (i & 3)) * 2);
+        if (inN) { nBlocks.push([nStart, i - nStart]); inN = false; }
+      }
+    }
+    if (inN) nBlocks.push([nStart, this.length - nStart]);
+    this.data = bytes;
+    this.nBlocks = nBlocks;
+  }
+
+  // Random-Access: Substring von [start, start+len)
+  get(start, len) {
+    if (start < 0 || len < 0 || start + len > this.length) {
+      throw new Error('2bit out of range: start=' + start + ' len=' + len + ' total=' + this.length);
+    }
+    const out = new Array(len);
+    for (let i = 0; i < len; i++) {
+      const pos = start + i;
+      const bits = (this.data[pos >> 2] >> ((3 - (pos & 3)) * 2)) & 0x3;
+      out[i] = BITS_TO_BASE[bits];
+    }
+    // N-Blöcke einblenden
+    for (const [ns, nl] of this.nBlocks) {
+      if (ns >= start + len) break;
+      if (ns + nl <= start) continue;
+      const from = Math.max(ns, start) - start;
+      const to = Math.min(ns + nl, start + len) - start;
+      for (let i = from; i < to; i++) out[i] = 'N';
+    }
+    return out.join('');
+  }
+
+  // Reverse-Complement von [start, start+len)
+  revcomp(start, len) {
+    const s = this.get(start, len);
+    let r = '';
+    for (let i = s.length - 1; i >= 0; i--) {
+      r += COMPLEMENT[s[i]] || 'N';
+    }
+    return r;
+  }
+
+  // Für Debug
+  sizeBytes() { return this.data.byteLength; }
+}
+
+// ---------------------------------------------------------------------------
+// GenBank Parser
+// ---------------------------------------------------------------------------
+function parseGenBank(text) {
+  const lines = text.split(/\r?\n/);
+  const result = {
+    format: 'genbank',
+    organism: null,
+    accession: null,
+    definition: null,
+    length: 0,
+    topology: null,
+    features: [],
+    sequence: ''
+  };
+
+  let section = null; // 'header', 'features', 'origin'
+  let currentFeature = null;
+  let seqBuf = [];
+  let featIndent = -1;
+  let pendingQualifierKey = null;
+  let pendingQualifierValue = null;
+
+  const flushQualifier = () => {
+    if (currentFeature && pendingQualifierKey !== null) {
+      let v = pendingQualifierValue || '';
+      // Strip surrounding quotes (toleriere fehlende)
+      if (v.startsWith('"')) v = v.slice(1);
+      if (v.endsWith('"')) v = v.slice(0, -1);
+      currentFeature.qualifiers[pendingQualifierKey] = v;
+    }
+    pendingQualifierKey = null;
+    pendingQualifierValue = null;
+  };
+
+  const flushFeature = () => {
+    flushQualifier();
+    if (currentFeature) result.features.push(currentFeature);
+    currentFeature = null;
+  };
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    if (!line) continue;
+
+    if (line.startsWith('LOCUS')) {
+      // LOCUS   NC_000964  4215606 bp  DNA  circular  BCT  03-NOV-2020
+      const m = line.match(/^LOCUS\s+(\S+)\s+(\d+)\s+bp/);
+      if (m) {
+        result.accession = m[1];
+        result.length = parseInt(m[2], 10);
+      }
+      if (/\scircular\s/i.test(line)) result.topology = 'circular';
+      else if (/\slinear\s/i.test(line)) result.topology = 'linear';
+      section = 'header';
+    } else if (line.startsWith('DEFINITION')) {
+      result.definition = line.substring(12).trim();
+    } else if (line.startsWith('ACCESSION')) {
+      if (!result.accession) {
+        const parts = line.substring(12).trim().split(/\s+/);
+        if (parts[0]) result.accession = parts[0];
+      }
+    } else if (line.startsWith('  ORGANISM')) {
+      result.organism = line.substring(12).trim();
+    } else if (line.startsWith('FEATURES')) {
+      section = 'features';
+      continue;
+    } else if (line.startsWith('ORIGIN')) {
+      flushFeature();
+      section = 'origin';
+      continue;
+    } else if (line.startsWith('//')) {
+      section = null;
+    } else if (section === 'features') {
+      // Feature-Zeile-Klassifizierung:
+      //   Typ 1: "     CDS             1..1440"   -> Indent + Feature-Typ + Location
+      //   Typ 2: "                     /gene=\"dnaA\""  -> Indent + Qualifier (startet mit /)
+      //   Typ 3: "                     xxx continuation"  -> Fortsetzung einer Location oder eines Qualifier-Wertes
+      const indentMatch = line.match(/^(\s*)(.*)$/);
+      if (!indentMatch) continue;
+      const indent = indentMatch[1].length;
+      const content = indentMatch[2];
+      if (!content) continue;
+
+      // Feature-Indent initialisieren (GenBank: typischerweise 5)
+      if (featIndent === -1 && !content.startsWith('/')) featIndent = indent;
+
+      if (content.startsWith('/')) {
+        // Qualifier-Zeile
+        flushQualifier();
+        const eqIdx = content.indexOf('=');
+        if (eqIdx === -1) {
+          // Flag-Qualifier ohne Wert: /pseudo
+          pendingQualifierKey = content.substring(1);
+          pendingQualifierValue = '';
+        } else {
+          pendingQualifierKey = content.substring(1, eqIdx);
+          pendingQualifierValue = content.substring(eqIdx + 1);
+        }
+      } else if (indent === featIndent) {
+        // Neues Feature — content ist "TYPE   location"
+        const tokMatch = content.match(/^(\S+)\s+(.+)$/);
+        if (!tokMatch) continue;
+        flushFeature();
+        const type = tokMatch[1];
+        const loc = tokMatch[2].trim();
+        currentFeature = {
+          type,
+          location: loc,
+          strand: loc.includes('complement(') ? -1 : 1,
+          start: 0, end: 0,
+          qualifiers: {}
+        };
+      } else {
+        // Fortsetzung: entweder Qualifier-Wert oder Location
+        if (pendingQualifierKey !== null) {
+          const cont = content.trim();
+          if (pendingQualifierValue && !pendingQualifierValue.endsWith('"') && pendingQualifierValue.startsWith('"')) {
+            pendingQualifierValue += ' ' + cont;
+          } else if (pendingQualifierValue && pendingQualifierValue.startsWith('"') && pendingQualifierValue.endsWith('"')) {
+            // Bereits abgeschlossen — eigentlich sollte dann ein neuer Qualifier folgen, nicht Fortsetzung
+            pendingQualifierValue += cont;
+          } else {
+            // Unquoted (z.B. /codon_start=1 mehrzeilig, oder DB-xref-Listen)
+            pendingQualifierValue += cont;
+          }
+        } else if (currentFeature) {
+          currentFeature.location += content.trim();
+          if (currentFeature.location.includes('complement(')) currentFeature.strand = -1;
+        }
+      }
+    } else if (section === 'origin') {
+      // 61 acgtacgt acgtacgt ...
+      const cleaned = line.replace(/[\s\d]/g, '');
+      if (cleaned) seqBuf.push(cleaned);
+    }
+  }
+
+  flushFeature();
+  result.sequence = seqBuf.join('');
+
+  // Location zu start/end parsen (für jedes Feature)
+  for (const f of result.features) {
+    const loc = parseLocation(f.location);
+    f.start = loc.start;
+    f.end = loc.end;
+    f.strand = loc.strand;
+    f.segments = loc.segments;
+  }
+
+  if (!result.length && result.sequence) result.length = result.sequence.length;
+  return result;
+}
+
+// Location-Parser: "complement(123..456)", "join(1..100,200..300)", "1..100"
+function parseLocation(locStr) {
+  const s = locStr.trim();
+  let strand = 1;
+  let inner = s;
+  if (inner.startsWith('complement(')) {
+    strand = -1;
+    inner = inner.substring(11, inner.lastIndexOf(')'));
+  }
+  let segments = [];
+  if (inner.startsWith('join(') || inner.startsWith('order(')) {
+    const open = inner.indexOf('(');
+    inner = inner.substring(open + 1, inner.lastIndexOf(')'));
+    const parts = splitCommasRespectingParens(inner);
+    for (const p of parts) {
+      const seg = parseLocation(p);
+      segments.push(...(seg.segments.length ? seg.segments : [[seg.start, seg.end]]));
+    }
+  } else {
+    // "123..456" oder "<123..>456" oder "123^124" oder "123"
+    const cleaned = inner.replace(/[<>]/g, '');
+    const rangeMatch = cleaned.match(/^(\d+)\.\.(\d+)$/);
+    const pointMatch = cleaned.match(/^(\d+)$/);
+    const caretMatch = cleaned.match(/^(\d+)\^(\d+)$/);
+    if (rangeMatch) {
+      segments.push([parseInt(rangeMatch[1], 10), parseInt(rangeMatch[2], 10)]);
+    } else if (pointMatch) {
+      const p = parseInt(pointMatch[1], 10);
+      segments.push([p, p]);
+    } else if (caretMatch) {
+      segments.push([parseInt(caretMatch[1], 10), parseInt(caretMatch[2], 10)]);
+    }
+  }
+  if (segments.length === 0) {
+    return { start: 0, end: 0, strand, segments: [] };
+  }
+  const starts = segments.map(s => s[0]);
+  const ends = segments.map(s => s[1]);
+  return {
+    start: Math.min(...starts),
+    end: Math.max(...ends),
+    strand,
+    segments
+  };
+}
+
+function splitCommasRespectingParens(s) {
+  const out = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+    else if (c === ',' && depth === 0) {
+      out.push(s.substring(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(s.substring(start));
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// EMBL Parser
+// ---------------------------------------------------------------------------
+function parseEmbl(text) {
+  const lines = text.split(/\r?\n/);
+  const result = {
+    format: 'embl',
+    organism: null,
+    accession: null,
+    definition: null,
+    length: 0,
+    topology: null,
+    features: [],
+    sequence: ''
+  };
+
+  let section = null;
+  let currentFeature = null;
+  let pendingQualifierKey = null;
+  let pendingQualifierValue = null;
+  let seqBuf = [];
+
+  const flushQualifier = () => {
+    if (currentFeature && pendingQualifierKey !== null) {
+      let v = pendingQualifierValue || '';
+      if (v.startsWith('"')) v = v.slice(1);
+      if (v.endsWith('"')) v = v.slice(0, -1);
+      currentFeature.qualifiers[pendingQualifierKey] = v;
+    }
+    pendingQualifierKey = null;
+    pendingQualifierValue = null;
+  };
+  const flushFeature = () => {
+    flushQualifier();
+    if (currentFeature) result.features.push(currentFeature);
+    currentFeature = null;
+  };
+
+  for (const line of lines) {
+    if (line.length < 2) continue;
+    const code = line.substring(0, 2);
+    const rest = line.substring(5); // Spalte 6 beginnt Daten in EMBL
+
+    if (code === 'ID') {
+      // ID   AL009126; SV 3; circular; genomic DNA; STD; PRO; 4215606 BP.
+      const m = rest.match(/^(\S+?);/);
+      if (m) result.accession = m[1];
+      const bpm = rest.match(/(\d+)\s*BP/i);
+      if (bpm) result.length = parseInt(bpm[1], 10);
+      if (/circular/i.test(rest)) result.topology = 'circular';
+      else if (/linear/i.test(rest)) result.topology = 'linear';
+    } else if (code === 'AC') {
+      if (!result.accession) {
+        const acc = rest.split(';')[0].trim();
+        if (acc) result.accession = acc;
+      }
+    } else if (code === 'DE') {
+      result.definition = (result.definition ? result.definition + ' ' : '') + rest.trim();
+    } else if (code === 'OS') {
+      result.organism = (result.organism ? result.organism + ' ' : '') + rest.trim();
+    } else if (code === 'FH') {
+      section = 'features';
+    } else if (code === 'FT') {
+      // EMBL Feature-Table. Spalte 6+ ist der Inhalt (rest).
+      // Feature-Header: "CDS             complement(1234..5678)"  — Typ + whitespace + Location
+      // Qualifier:      "                /gene=\"dnaA\""          — nur mit / am Start
+      // Fortsetzung:    "                continuation-text"
+      const ftContent = rest;
+      const trimmed = ftContent.trim();
+      if (!trimmed) continue;
+
+      // Feature-Header vs. Qualifier/Continuation über Indentation:
+      // Wenn das erste nicht-whitespace Zeichen an Position 0 von rest steht (d.h. kein Leading-Whitespace in rest), ist es ein Feature-Header
+      const hasLeadingSpace = ftContent.length > 0 && ftContent[0] === ' ';
+
+      if (!hasLeadingSpace && !trimmed.startsWith('/')) {
+        // Feature-Header — Form: "TYPE   location"
+        const tokMatch = ftContent.match(/^(\S+)\s+(.+)$/);
+        if (tokMatch) {
+          flushFeature();
+          const loc = tokMatch[2].trim();
+          currentFeature = {
+            type: tokMatch[1],
+            location: loc,
+            strand: loc.includes('complement(') ? -1 : 1,
+            start: 0, end: 0,
+            qualifiers: {}
+          };
+        }
+      } else if (trimmed.startsWith('/')) {
+        flushQualifier();
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx === -1) {
+          pendingQualifierKey = trimmed.substring(1);
+          pendingQualifierValue = '';
+        } else {
+          pendingQualifierKey = trimmed.substring(1, eqIdx);
+          pendingQualifierValue = trimmed.substring(eqIdx + 1);
+        }
+      } else {
+        // Fortsetzung
+        if (pendingQualifierKey !== null) {
+          if (pendingQualifierValue && !pendingQualifierValue.endsWith('"') && pendingQualifierValue.startsWith('"')) {
+            pendingQualifierValue += ' ' + trimmed;
+          } else {
+            pendingQualifierValue += trimmed;
+          }
+        } else if (currentFeature) {
+          currentFeature.location += trimmed;
+          if (currentFeature.location.includes('complement(')) currentFeature.strand = -1;
+        }
+      }
+    } else if (code === 'SQ') {
+      flushFeature();
+      section = 'sequence';
+    } else if (code === '  ' && section === 'sequence') {
+      const cleaned = line.replace(/[\s\d]/g, '');
+      if (cleaned) seqBuf.push(cleaned);
+    } else if (code === '//') {
+      section = null;
+    }
+  }
+
+  flushFeature();
+  result.sequence = seqBuf.join('');
+
+  for (const f of result.features) {
+    const loc = parseLocation(f.location);
+    f.start = loc.start;
+    f.end = loc.end;
+    f.strand = loc.strand;
+    f.segments = loc.segments;
+  }
+
+  if (!result.length && result.sequence) result.length = result.sequence.length;
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// FASTA Parser
+// ---------------------------------------------------------------------------
+function parseFasta(text) {
+  const lines = text.split(/\r?\n/);
+  const records = [];
+  let current = null;
+  for (const line of lines) {
+    if (line.startsWith('>')) {
+      if (current) records.push(current);
+      const header = line.substring(1).trim();
+      const id = header.split(/\s+/)[0];
+      current = { id, header, seq: [] };
+    } else if (current && line) {
+      current.seq.push(line.trim());
+    }
+  }
+  if (current) records.push(current);
+  for (const r of records) r.sequence = r.seq.join('');
+  return records;
+}
+
+// ---------------------------------------------------------------------------
+// GFF Parser
+// ---------------------------------------------------------------------------
+function parseGff(text) {
+  const lines = text.split(/\r?\n/);
+  const features = [];
+  for (const line of lines) {
+    if (!line || line.startsWith('#')) continue;
+    const cols = line.split('\t');
+    if (cols.length < 8) continue;
+    const [seqid, source, type, startStr, endStr, score, strand, phase, attrStr] = cols;
+    const attrs = {};
+    if (attrStr) {
+      for (const pair of attrStr.split(';')) {
+        const eq = pair.indexOf('=');
+        if (eq === -1) continue;
+        const k = pair.substring(0, eq).trim();
+        const v = pair.substring(eq + 1).trim();
+        attrs[k] = decodeURIComponent(v);
+      }
+    }
+    features.push({
+      seqid,
+      type,
+      start: parseInt(startStr, 10),
+      end: parseInt(endStr, 10),
+      strand: strand === '-' ? -1 : 1,
+      location: startStr + '..' + endStr,
+      segments: [[parseInt(startStr, 10), parseInt(endStr, 10)]],
+      qualifiers: {
+        locus_tag: attrs.locus_tag || attrs.ID || null,
+        gene: attrs.gene || attrs.Name || null,
+        product: attrs.product || null
+      }
+    });
+  }
+  return features;
+}
+
+function combineFastaGff(fastaRecs, gffFeatures) {
+  // Ersten FASTA-Record als Hauptsequenz nehmen (bakterielle Einzelchromosome)
+  if (fastaRecs.length === 0) throw new Error('FASTA enthält keine Sequenzen');
+  const main = fastaRecs[0];
+  const relevantFeatures = gffFeatures.filter(f => f.seqid === main.id || fastaRecs.length === 1);
+  return {
+    format: 'fasta+gff',
+    organism: main.header,
+    accession: main.id,
+    definition: main.header,
+    length: main.sequence.length,
+    topology: null,
+    features: relevantFeatures,
+    sequence: main.sequence
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Format-Detection
+// ---------------------------------------------------------------------------
+function detectFormat(text, filename) {
+  const head = text.substring(0, 500);
+  if (head.startsWith('LOCUS') || /^\s*LOCUS/m.test(head)) return 'genbank';
+  if (/^ID\s+/m.test(head)) return 'embl';
+  if (head.startsWith('>')) return 'fasta';
+  if (head.startsWith('##gff') || /^[^\t]+\t[^\t]+\t[^\t]+\t\d+\t\d+/m.test(head)) return 'gff';
+  // Fallback via Filename
+  const lower = (filename || '').toLowerCase();
+  if (lower.match(/\.(gb|gbk|gbff)$/)) return 'genbank';
+  if (lower.match(/\.embl$/)) return 'embl';
+  if (lower.match(/\.(fa|fasta|fna)$/)) return 'fasta';
+  if (lower.match(/\.(gff|gff3)$/)) return 'gff';
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Daten-Layer: mf
+// ---------------------------------------------------------------------------
+const mf = {
+  genome: null,   // { accession, organism, definition, length, topology, features }
+  twobit: null,   // TwoBit-Instanz
+  sourceInfo: null, // { source: 'file'|'ncbi'|'ena', name, sha256, bytes }
+};
+
+async function setGenome(parsed, sourceInfo) {
+  if (!parsed.sequence || parsed.sequence.length === 0) {
+    throw new Error('Keine Sequenz im Genom gefunden');
+  }
+  mf.twobit = new TwoBit(parsed.sequence);
+  mf.genome = {
+    accession: parsed.accession,
+    organism: parsed.organism,
+    definition: parsed.definition,
+    length: mf.twobit.length,
+    topology: parsed.topology,
+    format: parsed.format,
+    features: parsed.features || []
+  };
+  mf.sourceInfo = sourceInfo || null;
+
+  const geneCount = mf.genome.features.filter(f => f.type === 'gene').length;
+  const cdsCount = mf.genome.features.filter(f => f.type === 'CDS').length;
+
+  renderGenomeInfo(geneCount, cdsCount);
+  log('Genom geladen: ' + (mf.genome.accession || '?') + ', ' + mf.genome.length + ' bp, ' +
+       mf.genome.features.length + ' Features (' + geneCount + ' genes, ' + cdsCount + ' CDS)', 'ok');
+}
+
+function renderGenomeInfo(geneCount, cdsCount) {
+  const grid = document.getElementById('info-grid');
+  const featCounts = {};
+  for (const f of mf.genome.features) featCounts[f.type] = (featCounts[f.type] || 0) + 1;
+  const featSummary = Object.entries(featCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => k + ': ' + v).join(', ');
+  const rows = [
+    ['Organismus', mf.genome.organism || '—'],
+    ['Accession', mf.genome.accession || '—'],
+    ['Definition', mf.genome.definition || '—'],
+    ['Länge', mf.genome.length.toLocaleString('de-DE') + ' bp'],
+    ['Topologie', mf.genome.topology || '—'],
+    ['Format', mf.genome.format],
+    ['Features', featSummary],
+    ['2bit-Größe', mf.twobit.sizeBytes().toLocaleString('de-DE') + ' bytes (' +
+      (mf.twobit.sizeBytes() / mf.twobit.length * 8).toFixed(2) + ' bits/base)'],
+    ['Quelle', mf.sourceInfo ? (mf.sourceInfo.source + ': ' + mf.sourceInfo.name) : '—']
+  ];
+  grid.innerHTML = '';
+  for (const [k, v] of rows) {
+    const kEl = document.createElement('div');
+    kEl.className = 'k'; kEl.textContent = k;
+    const vEl = document.createElement('div');
+    vEl.className = 'v'; vEl.textContent = v;
+    grid.appendChild(kEl);
+    grid.appendChild(vEl);
+  }
+  document.getElementById('genome-info').classList.add('show');
+}
+
+// ---------------------------------------------------------------------------
+// File-Loading
+// ---------------------------------------------------------------------------
+async function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('FileReader-Fehler: ' + file.name));
+    reader.readAsText(file);
+  });
+}
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList);
+  if (files.length === 0) return;
+
+  clearStatus();
+  setStatus('Lese ' + files.length + ' Datei(en)...', 'info');
+
+  try {
+    // Klassifizierung: brauchen wir FASTA+GFF Paar, oder ein Standalone-File?
+    const classified = [];
+    for (const f of files) {
+      const text = await readFileText(f);
+      const fmt = detectFormat(text, f.name);
+      classified.push({ file: f, text, format: fmt });
+      log('Datei ' + f.name + ': erkanntes Format = ' + (fmt || 'unbekannt'), fmt ? 'info' : 'warn');
+    }
+
+    const fastas = classified.filter(c => c.format === 'fasta');
+    const gffs = classified.filter(c => c.format === 'gff');
+    const gbs = classified.filter(c => c.format === 'genbank');
+    const embls = classified.filter(c => c.format === 'embl');
+
+    let parsed = null;
+    let sourceInfo = null;
+
+    if (gbs.length >= 1) {
+      parsed = parseGenBank(gbs[0].text);
+      sourceInfo = { source: 'file', name: gbs[0].file.name, bytes: gbs[0].text.length };
+    } else if (embls.length >= 1) {
+      parsed = parseEmbl(embls[0].text);
+      sourceInfo = { source: 'file', name: embls[0].file.name, bytes: embls[0].text.length };
+    } else if (fastas.length >= 1 && gffs.length >= 1) {
+      const fastaRecs = parseFasta(fastas[0].text);
+      const gffFeats = parseGff(gffs[0].text);
+      parsed = combineFastaGff(fastaRecs, gffFeats);
+      sourceInfo = { source: 'file', name: fastas[0].file.name + ' + ' + gffs[0].file.name,
+                     bytes: fastas[0].text.length + gffs[0].text.length };
+    } else if (fastas.length >= 1) {
+      const fastaRecs = parseFasta(fastas[0].text);
+      parsed = combineFastaGff(fastaRecs, []);
+      sourceInfo = { source: 'file', name: fastas[0].file.name, bytes: fastas[0].text.length };
+      log('FASTA ohne GFF geladen — keine Feature-Annotation verfügbar', 'warn');
+    } else {
+      throw new Error('Kein unterstütztes Format erkannt. Ziehe .gb / .embl / .fa+.gff auf die Drop-Zone.');
+    }
+
+    await setGenome(parsed, sourceInfo);
+    setStatus('Genom erfolgreich geladen: ' + (parsed.accession || parsed.organism || 'unbekannt'), 'ok');
+  } catch (err) {
+    log('Fehler beim Laden: ' + err.message, 'err');
+    setStatus('Fehler: ' + err.message, 'err');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Accession-Abruf (NCBI / ENA)
+// ---------------------------------------------------------------------------
+function guessSource(accession) {
+  const a = accession.trim().toUpperCase();
+  if (/^(NC_|NZ_|NG_|NM_|NR_|NP_|XM_|XR_|YP_|CP_?\d|GCF_)/.test(a)) return 'ncbi';
+  if (/^(AL|AM|AP|AJ|CR|CT|CU|FM|FN|FP|FR|FO|HE|HF|HG|LN|LM|LR|LS|LT|OU|OW|OX|OY|OZ|U\d|X\d|Y\d|Z\d)/.test(a)) return 'ena';
+  return 'ncbi'; // Default: NCBI versuchen
+}
+
+async function fetchAccession() {
+  const acc = document.getElementById('accession-input').value.trim();
+  if (!acc) { setStatus('Bitte Accession angeben', 'warn'); return; }
+  let source = document.getElementById('source-select').value;
+  if (source === 'auto') source = guessSource(acc);
+
+  const btn = document.getElementById('accession-fetch');
+  btn.disabled = true;
+  clearStatus();
+  setStatus('Lade ' + acc + ' von ' + source.toUpperCase() + '...', 'info', true);
+  log('Fetch: ' + acc + ' via ' + source, 'info');
+
+  try {
+    let text, url, format;
+    if (source === 'ncbi') {
+      url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=' +
+            encodeURIComponent(acc) + '&rettype=gbwithparts&retmode=text';
+      format = 'genbank';
+    } else {
+      url = 'https://www.ebi.ac.uk/ena/browser/api/embl/' + encodeURIComponent(acc) + '?lineLimit=100000000';
+      format = 'embl';
+    }
+    log('URL: ' + url, 'info');
+    text = await fetchWithProgress(url);
+    if (!text || text.length < 100) throw new Error('Antwort zu kurz (' + (text ? text.length : 0) + ' bytes)');
+    if (text.includes('<ERROR>') || text.includes('error:')) {
+      // NCBI-Fehlerseite
+      log('Server-Fehler: ' + text.substring(0, 200), 'err');
+      throw new Error('Server meldete Fehler. Prüfe Accession.');
+    }
+    let parsed;
+    if (format === 'genbank') parsed = parseGenBank(text);
+    else parsed = parseEmbl(text);
+
+    // Bakterielle RefSeq-Records enthalten manchmal keine Inline-Sequenz
+    // (CONTIG-Statement verweist auf separate Sequenz). Fallback: FASTA nachladen.
+    if (!parsed.sequence || parsed.sequence.length === 0) {
+      log('Keine Inline-Sequenz im Record — hole FASTA separat', 'warn');
+      setStatus('Hole Sequenz separat...', 'info', true);
+      let fastaUrl;
+      if (source === 'ncbi') {
+        fastaUrl = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=' +
+                   encodeURIComponent(acc) + '&rettype=fasta&retmode=text';
+      } else {
+        fastaUrl = 'https://www.ebi.ac.uk/ena/browser/api/fasta/' + encodeURIComponent(acc) + '?lineLimit=100000000';
+      }
+      log('FASTA-URL: ' + fastaUrl, 'info');
+      const fastaText = await fetchWithProgress(fastaUrl);
+      const fastaRecs = parseFasta(fastaText);
+      if (fastaRecs.length === 0 || !fastaRecs[0].sequence) {
+        throw new Error('FASTA-Sequenz ebenfalls leer');
+      }
+      parsed.sequence = fastaRecs[0].sequence;
+      if (!parsed.length) parsed.length = parsed.sequence.length;
+      log('Sequenz nachgeladen: ' + parsed.sequence.length + ' bp', 'ok');
+    }
+
+    await setGenome(parsed, { source, name: acc, bytes: text.length });
+    setStatus('Genom geladen: ' + acc, 'ok');
+  } catch (err) {
+    log('Fetch-Fehler: ' + err.message, 'err');
+    setStatus('Fehler beim Abruf: ' + err.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function fetchWithProgress(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('HTTP ' + response.status + ' ' + response.statusText);
+  const contentLength = parseInt(response.headers.get('Content-Length') || '0', 10);
+  if (!contentLength || !response.body) {
+    // Kein Streaming möglich, direkt text()
+    setProgress(50);
+    const text = await response.text();
+    setProgress(100);
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (contentLength) setProgress((received / contentLength) * 100);
+  }
+  const merged = new Uint8Array(received);
+  let off = 0;
+  for (const c of chunks) { merged.set(c, off); off += c.length; }
+  return new TextDecoder('utf-8').decode(merged);
+}
+
+// ---------------------------------------------------------------------------
+// UI-Events
+// ---------------------------------------------------------------------------
+const dz = document.getElementById('dropzone');
+const fi = document.getElementById('file-input');
+dz.addEventListener('click', (e) => { if (e.target.tagName !== 'INPUT') fi.click(); });
+fi.addEventListener('change', () => handleFiles(fi.files));
+dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragging'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragging'));
+dz.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dz.classList.remove('dragging');
+  if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+});
+
+document.getElementById('accession-fetch').addEventListener('click', fetchAccession);
+document.getElementById('accession-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') fetchAccession();
+});
+
+// Debug-Panel
+const dbgPanel = document.getElementById('debug-panel');
+document.getElementById('dbg-toggle').addEventListener('click', () => {
+  dbgPanel.classList.toggle('collapsed');
+  document.getElementById('dbg-chevron').textContent = dbgPanel.classList.contains('collapsed') ? '▲' : '▼';
+});
+
+document.querySelectorAll('#debug-panel .dbg-actions button').forEach(btn => {
+  btn.addEventListener('click', () => handleDebugAction(btn.dataset.action));
+});
+
+function handleDebugAction(action) {
+  if (action === 'clear') {
+    dbgLog.innerHTML = '';
+    return;
+  }
+  if (!mf.genome) {
+    log('Kein Genom geladen', 'warn');
+    return;
+  }
+  if (action === 'stats') {
+    const featTypes = {};
+    for (const f of mf.genome.features) featTypes[f.type] = (featTypes[f.type] || 0) + 1;
+    logPre(JSON.stringify({
+      accession: mf.genome.accession,
+      organism: mf.genome.organism,
+      length: mf.genome.length,
+      topology: mf.genome.topology,
+      format: mf.genome.format,
+      features_total: mf.genome.features.length,
+      feature_types: featTypes,
+      twobit_bytes: mf.twobit.sizeBytes(),
+      n_blocks: mf.twobit.nBlocks.length
+    }, null, 2));
+  } else if (action === 'getseq') {
+    const startStr = prompt('Start-Position (1-basiert)?', '1');
+    if (!startStr) return;
+    const lenStr = prompt('Länge?', '60');
+    if (!lenStr) return;
+    const start = parseInt(startStr, 10) - 1;
+    const len = parseInt(lenStr, 10);
+    try {
+      const s = mf.twobit.get(start, len);
+      logPre('Sequenz [' + (start + 1) + '..' + (start + len) + ']:\n' + s);
+    } catch (e) { log(e.message, 'err'); }
+  } else if (action === 'revcomp') {
+    const startStr = prompt('Start-Position (1-basiert)?', '1');
+    if (!startStr) return;
+    const lenStr = prompt('Länge?', '60');
+    if (!lenStr) return;
+    const start = parseInt(startStr, 10) - 1;
+    const len = parseInt(lenStr, 10);
+    try {
+      const s = mf.twobit.get(start, len);
+      const rc = mf.twobit.revcomp(start, len);
+      logPre('Forward:  ' + s + '\nRevComp:  ' + rc);
+    } catch (e) { log(e.message, 'err'); }
+  } else if (action === 'listgenes') {
+    const startStr = prompt('Start-Position (1-basiert)?', '1');
+    if (!startStr) return;
+    const endStr = prompt('End-Position (1-basiert)?', '10000');
+    if (!endStr) return;
+    const start = parseInt(startStr, 10);
+    const end = parseInt(endStr, 10);
+    const genes = mf.genome.features.filter(f =>
+      (f.type === 'gene' || f.type === 'CDS') && f.end >= start && f.start <= end
+    ).slice(0, 30);
+    const lines = genes.map(g => {
+      const lt = g.qualifiers.locus_tag || '';
+      const nm = g.qualifiers.gene || '';
+      const pr = (g.qualifiers.product || '').substring(0, 50);
+      return (g.strand === 1 ? '+' : '-') + ' ' +
+             String(g.start).padStart(8) + '..' + String(g.end).padEnd(8) + ' ' +
+             g.type.padEnd(6) + ' ' + lt.padEnd(14) + ' ' + nm.padEnd(8) + ' ' + pr;
+    });
+    logPre('Features in [' + start + '..' + end + ']:\n' + lines.join('\n') +
+           (genes.length === 30 ? '\n... (beschränkt auf 30)' : ''));
+  } else if (action === 'parsertest') {
+    runParserSelftest();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Parser-Selbsttest
+// ---------------------------------------------------------------------------
+function runParserSelftest() {
+  log('Parser-Selbsttest läuft...', 'info');
+  let pass = 0, fail = 0;
+  const check = (name, cond, detail) => {
+    if (cond) { pass++; log('  ✓ ' + name, 'ok'); }
+    else { fail++; log('  ✗ ' + name + (detail ? ' — ' + detail : ''), 'err'); }
+  };
+
+  // 2bit Roundtrip
+  const seq = 'ATGCGTACGTTANGCATCGTACGTATCG';
+  const tb = new TwoBit(seq);
+  const decoded = tb.get(0, seq.length);
+  check('2bit Roundtrip Länge', decoded.length === seq.length);
+  // Alle Positionen außer N-Blöcke
+  let matches = 0;
+  for (let i = 0; i < seq.length; i++) if (seq[i].toUpperCase() === decoded[i]) matches++;
+  check('2bit Roundtrip Zeichen', matches === seq.length, matches + '/' + seq.length);
+
+  // Revcomp: ATGC -> GCAT (complement: TACG, reverse: GCAT)
+  check('2bit revcomp ATGC', tb.revcomp(0, 4) === 'GCAT', 'expected GCAT got ' + tb.revcomp(0, 4));
+
+  // Random Access
+  check('2bit random', tb.get(4, 4) === 'GTAC', 'got ' + tb.get(4, 4));
+
+  // GenBank-Mini
+  const gb = `LOCUS       TESTSEQ                  50 bp    DNA     linear   BCT 01-JAN-2026
+DEFINITION  Test sequence.
+ACCESSION   TESTSEQ
+SOURCE      Testus organismus
+  ORGANISM  Testus organismus
+FEATURES             Location/Qualifiers
+     source          1..50
+                     /organism="Testus organismus"
+     gene            5..20
+                     /gene="geneA"
+                     /locus_tag="TEST_0001"
+     CDS             complement(25..40)
+                     /gene="geneB"
+                     /locus_tag="TEST_0002"
+                     /product="hypothetical protein"
+ORIGIN
+        1 atgcgtacgt tagcatcgta cgtatcgatc gtacgatcgt acgatcgtac
+//`;
+  const gbParsed = parseGenBank(gb);
+  check('GenBank accession', gbParsed.accession === 'TESTSEQ');
+  check('GenBank length', gbParsed.length === 50);
+  check('GenBank organism', gbParsed.organism === 'Testus organismus');
+  check('GenBank features count', gbParsed.features.length === 3, 'got ' + gbParsed.features.length);
+  const geneA = gbParsed.features.find(f => f.qualifiers.gene === 'geneA');
+  check('GenBank geneA existiert', !!geneA);
+  check('GenBank geneA start/end', geneA && geneA.start === 5 && geneA.end === 20);
+  check('GenBank geneA strand', geneA && geneA.strand === 1);
+  const geneB = gbParsed.features.find(f => f.qualifiers.gene === 'geneB');
+  check('GenBank geneB complement', geneB && geneB.strand === -1);
+  check('GenBank sequence', gbParsed.sequence.length === 50);
+
+  // EMBL-Mini
+  const embl = `ID   TESTSEQ; SV 1; linear; genomic DNA; STD; PRO; 50 BP.
+AC   TESTSEQ;
+DE   Test sequence.
+OS   Testus organismus
+FH   Key             Location/Qualifiers
+FT   source          1..50
+FT                   /organism="Testus organismus"
+FT   gene            5..20
+FT                   /gene="geneA"
+FT                   /locus_tag="TEST_0001"
+FT   CDS             complement(25..40)
+FT                   /gene="geneB"
+FT                   /product="hypothetical protein"
+SQ   Sequence 50 BP;
+     atgcgtacgt tagcatcgta cgtatcgatc gtacgatcgt acgatcgtac        50
+//`;
+  const emParsed = parseEmbl(embl);
+  check('EMBL accession', emParsed.accession === 'TESTSEQ');
+  check('EMBL length', emParsed.length === 50);
+  check('EMBL features', emParsed.features.length === 3, 'got ' + emParsed.features.length);
+  const emGeneB = emParsed.features.find(f => f.qualifiers.gene === 'geneB');
+  check('EMBL geneB complement', emGeneB && emGeneB.strand === -1);
+
+  // FASTA+GFF
+  const fasta = '>chr1 Test\nATGCGTACGTTAGCATCGTACGTATCGATCGTACGATCGTACGATCGTAC\n';
+  const gff = `##gff-version 3
+chr1\ttest\tgene\t5\t20\t.\t+\t.\tID=gene1;Name=geneA;locus_tag=TEST_0001
+chr1\ttest\tCDS\t25\t40\t.\t-\t0\tID=cds1;gene=geneB;product=hypothetical protein
+`;
+  const fastaRecs = parseFasta(fasta);
+  const gffFeats = parseGff(gff);
+  const combined = combineFastaGff(fastaRecs, gffFeats);
+  check('FASTA+GFF length', combined.length === 50);
+  check('FASTA+GFF features', combined.features.length === 2);
+  const fgGeneB = combined.features.find(f => f.qualifiers.gene === 'geneB');
+  check('FASTA+GFF geneB strand', fgGeneB && fgGeneB.strand === -1);
+
+  // Join-Location (spliced)
+  const gbJoin = `LOCUS       TEST2                    100 bp    DNA     linear   BCT 01-JAN-2026
+FEATURES             Location/Qualifiers
+     CDS             join(10..30,50..80)
+                     /gene="spliced"
+ORIGIN
+        1 atgcgtacgt tagcatcgta cgtatcgatc gtacgatcgt acgatcgtac gtacgtacgt
+       61 acgtacgtac gtacgtacgt acgtacgtac
+//`;
+  const gbj = parseGenBank(gbJoin);
+  const sp = gbj.features.find(f => f.qualifiers.gene === 'spliced');
+  check('GenBank join segments', sp && sp.segments.length === 2, 'segs=' + (sp ? sp.segments.length : '?'));
+  check('GenBank join start/end span', sp && sp.start === 10 && sp.end === 80);
+
+  log('Selbsttest fertig: ' + pass + ' ok, ' + fail + ' fehlgeschlagen',
+      fail === 0 ? 'ok' : 'err');
+}
+
+// ---------------------------------------------------------------------------
+// Global-API für Dev-Konsole
+// ---------------------------------------------------------------------------
+window.mf = {
+  getSequence: (start, end) => {
+    if (!mf.twobit) throw new Error('Kein Genom geladen');
+    // 1-basiert, inklusiv (biologisch), konvertiere für 2bit (0-basiert, exklusiv)
+    return mf.twobit.get(start - 1, end - start + 1);
+  },
+  revcomp: (start, len) => {
+    if (!mf.twobit) throw new Error('Kein Genom geladen');
+    return mf.twobit.revcomp(start - 1, len);
+  },
+  listGenes: (start, end) => {
+    if (!mf.genome) throw new Error('Kein Genom geladen');
+    return mf.genome.features.filter(f =>
+      (f.type === 'gene' || f.type === 'CDS') && f.end >= start && f.start <= end
+    );
+  },
+  stats: () => ({
+    genome: mf.genome ? {
+      accession: mf.genome.accession,
+      organism: mf.genome.organism,
+      length: mf.genome.length,
+      features: mf.genome.features.length
+    } : null,
+    twobit: mf.twobit ? {
+      bytes: mf.twobit.sizeBytes(),
+      nBlocks: mf.twobit.nBlocks.length
+    } : null
+  }),
+  version: VERSION,
+  _internal: { mf, TwoBit, parseGenBank, parseEmbl, parseFasta, parseGff, combineFastaGff }
+};
+
+log('Motif Finder ' + VERSION + ' bereit. ?debug für Eruda, Debug-Panel unten rechts.', 'info');
+</script>
+
+</body>
+</html>

@@ -1,0 +1,3658 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motif Finder v0.3.1</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --bg-panel: #161a21;
+    --bg-elevated: #1d222b;
+    --fg: #d4d7dd;
+    --fg-dim: #8a91a0;
+    --fg-mute: #5a6170;
+    --accent: #7ab8f5;
+    --accent-dim: #4a7ab5;
+    --ok: #81c784;
+    --warn: #ffb74d;
+    --err: #e85a4f;
+    --border: #262b34;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+  header .version {
+    color: var(--accent);
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+  }
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px 20px 120px;
+  }
+  .load-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--fg-dim);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--bg-panel);
+  }
+  .dropzone:hover, .dropzone.dragging {
+    border-color: var(--accent);
+    background: var(--bg-elevated);
+    color: var(--fg);
+  }
+  .dropzone input[type=file] { display: none; }
+  .dropzone .main-line {
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  .dropzone .sub-line {
+    font-size: 12px;
+    color: var(--fg-mute);
+  }
+  .accession-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: var(--bg-panel);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .accession-row label {
+    font-size: 12px;
+    color: var(--fg-dim);
+    white-space: nowrap;
+  }
+  .accession-row select, .accession-row input, .accession-row button {
+    background: var(--bg-elevated);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .accession-row input {
+    flex: 1;
+    font-family: ui-monospace, monospace;
+  }
+  .accession-row button {
+    cursor: pointer;
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+  .accession-row button:hover { background: var(--accent-dim); color: var(--bg); }
+  .accession-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status {
+    margin-top: 16px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.info { background: rgba(122, 184, 245, 0.1); border-left: 3px solid var(--accent); }
+  .status.ok { background: rgba(129, 199, 132, 0.1); border-left: 3px solid var(--ok); }
+  .status.warn { background: rgba(255, 183, 77, 0.1); border-left: 3px solid var(--warn); }
+  .status.err { background: rgba(232, 90, 79, 0.1); border-left: 3px solid var(--err); }
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .progress-bar > div {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.2s;
+  }
+  .genome-info {
+    margin-top: 24px;
+    background: var(--bg-panel);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    display: none;
+  }
+  .genome-info.show { display: block; }
+  .genome-info h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .info-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 18px;
+    font-size: 13px;
+  }
+  .info-grid .k { color: var(--fg-dim); }
+  .info-grid .v { font-family: ui-monospace, monospace; color: var(--fg); }
+
+  /* ========== v0.2: Motiv-Suche ========== */
+
+  /* Tooltip-Trigger und -Box */
+  .info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 1px solid var(--fg-mute);
+    color: var(--fg-mute);
+    font-size: 10px;
+    font-weight: bold;
+    font-style: italic;
+    margin-left: 4px;
+    cursor: pointer;
+    user-select: none;
+    vertical-align: middle;
+    line-height: 1;
+    background: transparent;
+    transition: color 0.1s, border-color 0.1s;
+  }
+  .info-icon:hover, .info-icon.active {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  #tooltip-box {
+    position: fixed;
+    z-index: 2000;
+    max-width: 300px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--accent-dim);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--fg);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    display: none;
+    pointer-events: auto;
+    white-space: pre-wrap;
+  }
+  #tooltip-box.show { display: block; }
+  #tooltip-box .tt-title {
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #tooltip-box .tt-close {
+    background: none; border: none; color: var(--fg-mute);
+    cursor: pointer; font-size: 14px; padding: 0; margin: 0;
+  }
+  #tooltip-box .tt-close:hover { color: var(--fg); }
+
+  /* Motiv-Sektion */
+  .motif-section {
+    margin-top: 24px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    display: none;
+  }
+  .motif-section.show { display: block; }
+  .motif-section h2 {
+    margin: 0 0 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--accent);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .motif-section h2 button {
+    background: var(--bg-elevated);
+    color: var(--accent);
+    border: 1px solid var(--accent-dim);
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .motif-section h2 button:hover { background: var(--accent-dim); color: var(--bg); }
+
+  .iupac-legend {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--fg-dim);
+    font-family: ui-monospace, monospace;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 4px 12px;
+    margin-bottom: 16px;
+  }
+  .iupac-legend .iup-item .code {
+    color: var(--accent);
+    font-weight: bold;
+    margin-right: 6px;
+  }
+
+  /* Motiv-Liste */
+  .motif-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .motif-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: 6px;
+    padding: 12px 14px;
+    transition: opacity 0.15s;
+  }
+  .motif-card.muted { opacity: 0.4; }
+  .motif-card .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .motif-card .row:last-child { margin-bottom: 0; }
+  .motif-card input[type="text"], .motif-card select, .motif-card input[type="number"] {
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .motif-card input[name="consensus"] {
+    flex: 1;
+    min-width: 100px;
+    font-family: ui-monospace, monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .motif-card input[name="name"] { width: 120px; }
+  .motif-card label {
+    font-size: 11px;
+    color: var(--fg-dim);
+  }
+  .motif-card button.action {
+    background: var(--bg-panel);
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .motif-card button.action:hover { color: var(--fg); border-color: var(--accent); }
+  .motif-card button.action.scan-btn { color: var(--accent); border-color: var(--accent-dim); }
+  .motif-card button.action.scan-btn:hover { background: var(--accent-dim); color: var(--bg); }
+  .motif-card button.action.scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .motif-card button.action.danger { color: var(--err); border-color: rgba(232, 90, 79, 0.3); }
+  .motif-card .color-swatch {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid var(--border);
+  }
+  .motif-card .palette {
+    display: none;
+    gap: 4px;
+    margin-left: 4px;
+  }
+  .motif-card .palette.show { display: flex; }
+  .motif-card .palette .swatch {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid var(--border);
+  }
+  .motif-card .palette .swatch:hover { border-color: var(--fg); }
+
+  /* Live-Vorschau */
+  .preview {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    font-size: 12px;
+    font-family: ui-monospace, monospace;
+    color: var(--fg-dim);
+  }
+  .preview .preview-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 1px 0;
+  }
+  .preview .preview-row .v { color: var(--fg); }
+  .preview .ampel {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 11px;
+    margin-left: 6px;
+  }
+  .preview .ampel.green  { background: rgba(129, 199, 132, 0.2); color: var(--ok); }
+  .preview .ampel.yellow { background: rgba(255, 213, 79, 0.2);  color: #ffd54f; }
+  .preview .ampel.orange { background: rgba(255, 183, 77, 0.2);  color: var(--warn); }
+  .preview .ampel.red    { background: rgba(232, 90, 79, 0.2);   color: var(--err); }
+
+  /* Treffer-Sektion */
+  .results-section {
+    margin-top: 18px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    display: none;
+  }
+  .results-section.show { display: block; }
+  .results-stats {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 16px;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .results-stats .k { color: var(--fg-dim); }
+  .results-stats .v { font-family: ui-monospace, monospace; color: var(--fg); }
+  .badge-warn {
+    display: inline-block;
+    background: rgba(232, 90, 79, 0.15);
+    color: var(--err);
+    border: 1px solid rgba(232, 90, 79, 0.3);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    margin-left: 8px;
+  }
+
+  .results-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 8px 0;
+    flex-wrap: wrap;
+  }
+  .results-controls label {
+    font-size: 11px;
+    color: var(--fg-dim);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .results-controls button {
+    background: var(--bg-elevated);
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .results-controls button:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    font-family: ui-monospace, monospace;
+  }
+  .results-table th {
+    text-align: left;
+    color: var(--fg-dim);
+    border-bottom: 1px solid var(--border);
+    padding: 4px 8px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .results-table th:hover { color: var(--accent); }
+  .results-table th.sorted { color: var(--accent); }
+  .results-table td {
+    padding: 3px 8px;
+    border-bottom: 1px solid rgba(38, 43, 52, 0.5);
+    white-space: nowrap;
+  }
+  .results-table tr:hover td { background: var(--bg-elevated); }
+  .results-table .seq-base { font-family: ui-monospace, monospace; }
+  .results-table .seq-base.b-A { color: #d4c896; }
+  .results-table .seq-base.b-T { color: #e8a5b8; }
+  .results-table .seq-base.b-G { color: #9ec8e8; }
+  .results-table .seq-base.b-C { color: #b4d878; }
+  .results-table .seq-base.b-N { color: #5a6170; }
+  .results-table .spacer-base {
+    color: var(--fg-mute);
+    font-style: italic;
+    font-family: ui-monospace, monospace;
+  }
+  .results-table .spacer-pad {
+    color: var(--fg-mute);
+    opacity: 0.4;
+    font-style: normal;
+    font-family: ui-monospace, monospace;
+  }
+  .results-table .seq-base.mismatch {
+    background: rgba(255, 255, 255, 0.08);
+    opacity: 0.7;
+  }
+  .results-table .results-overflow {
+    color: var(--warn);
+    font-style: italic;
+    text-align: center;
+    padding: 8px;
+  }
+  .ctx-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    background: var(--bg-elevated);
+    color: var(--fg-dim);
+  }
+  .ctx-pill.intergenic { color: var(--ok); }
+  .ctx-pill.intragenic { color: var(--warn); }
+
+  /* ========== v0.3.1: Genom-Distribution ========== */
+  .genome-dist-container {
+    margin: 6px 0 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px;
+    height: 90px;
+    position: relative;
+    cursor: crosshair;
+  }
+  .genome-dist-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ========== v0.3: Panels ========== */
+  .results-table th.col-sel, .results-table td.col-sel {
+    width: 24px;
+    text-align: center;
+    padding: 3px 4px;
+  }
+  .results-table .row-checkbox {
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+  .panel-section {
+    margin-top: 14px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    position: relative;
+  }
+  .panel-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--fg-dim);
+  }
+  .panel-section-header .ps-title { letter-spacing: 0.3px; }
+  .panel-section-header .ps-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .panel-section-header button {
+    background: var(--bg-elevated);
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .panel-section-header button:hover { color: var(--accent); border-color: var(--accent-dim); }
+  .panel-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px;
+    position: relative;
+  }
+  .panel-list.hidden { display: none; }
+  .panel-row {
+    position: relative;
+    background: var(--bg-elevated);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .panel-row canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .panel-row .panel-label {
+    position: absolute;
+    top: 2px; left: 6px;
+    font-size: 10px;
+    color: var(--fg-mute);
+    font-family: ui-monospace, monospace;
+    pointer-events: none;
+    text-shadow: 0 0 3px var(--bg-elevated);
+  }
+  .scale-floating {
+    position: absolute;
+    top: -2px;
+    right: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-family: ui-monospace, monospace;
+    color: var(--fg-dim);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .scale-floating .scale-bar {
+    display: inline-block;
+    height: 1px;
+    background: var(--fg-dim);
+    position: relative;
+  }
+  .scale-floating .scale-bar::before, .scale-floating .scale-bar::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    width: 1px;
+    height: 7px;
+    background: var(--fg-dim);
+  }
+  .scale-floating .scale-bar::before { left: 0; }
+  .scale-floating .scale-bar::after  { right: 0; }
+
+  /* Debug Panel */
+  #debug-panel {
+    position: fixed;
+    bottom: 0; right: 0;
+    width: 380px;
+    max-width: 100vw;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+    z-index: 1000;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    max-height: 60vh;
+    transition: transform 0.2s;
+  }
+  #debug-panel.collapsed {
+    transform: translateY(calc(100% - 32px));
+  }
+  #debug-panel .dbg-header {
+    padding: 6px 12px;
+    background: var(--bg-elevated);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--fg-dim);
+    user-select: none;
+  }
+  #debug-panel .dbg-header .dbg-title { color: var(--accent); letter-spacing: 0.5px; }
+  #debug-panel .dbg-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  #debug-panel .dbg-actions button {
+    background: var(--bg-elevated);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  #debug-panel .dbg-actions button:hover { border-color: var(--accent); color: var(--accent); }
+  #debug-panel .dbg-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    max-height: 300px;
+  }
+  #debug-panel .dbg-log .l-info { color: var(--fg); }
+  #debug-panel .dbg-log .l-ok { color: var(--ok); }
+  #debug-panel .dbg-log .l-warn { color: var(--warn); }
+  #debug-panel .dbg-log .l-err { color: var(--err); }
+  #debug-panel .dbg-log .l-ts { color: var(--fg-mute); margin-right: 6px; }
+  #debug-panel .dbg-log pre {
+    margin: 4px 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Motif Finder</h1>
+  <span class="version" id="version-tag">v0.3.1</span>
+</header>
+
+<main>
+  <div class="load-section">
+    <label class="dropzone" id="dropzone">
+      <div class="main-line">Datei hierher ziehen oder tappen zum Auswählen</div>
+      <div class="sub-line">GenBank (.gb, .gbk, .gbff), EMBL (.embl), FASTA (.fa, .fasta, .fna) + GFF (.gff, .gff3)</div>
+      <input type="file" id="file-input" accept=".gb,.gbk,.gbff,.embl,.fa,.fasta,.fna,.gff,.gff3,.txt" multiple>
+    </label>
+
+    <div class="accession-row">
+      <label>Accession:</label>
+      <select id="source-select">
+        <option value="auto">Auto</option>
+        <option value="ncbi">NCBI</option>
+        <option value="ena">ENA (EBI)</option>
+      </select>
+      <input type="text" id="accession-input" placeholder="z.B. NC_000964.3" spellcheck="false" autocapitalize="off" autocorrect="off" value="NC_000964.3">
+      <button id="accession-fetch">Laden</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="genome-info" id="genome-info">
+    <h2>Geladenes Genom</h2>
+    <div class="info-grid" id="info-grid"></div>
+  </div>
+
+  <div class="motif-section" id="motif-section">
+    <h2>
+      <span>Motive <span class="info-icon" data-tt="motiv">i</span></span>
+      <button id="add-motif-btn">+ Motiv hinzufügen</button>
+    </h2>
+    <div class="iupac-legend" id="iupac-legend"></div>
+    <div class="motif-list" id="motif-list"></div>
+  </div>
+</main>
+
+<div id="tooltip-box" role="tooltip">
+  <div class="tt-title">
+    <span id="tt-title-text"></span>
+    <button class="tt-close" id="tt-close">✕</button>
+  </div>
+  <div id="tt-body"></div>
+</div>
+
+<div id="debug-panel" class="collapsed">
+  <div class="dbg-header" id="dbg-toggle">
+    <span class="dbg-title">DEBUG</span>
+    <span id="dbg-chevron">▲</span>
+  </div>
+  <div class="dbg-actions">
+    <button data-action="stats">Stats</button>
+    <button data-action="getseq">Sequenz</button>
+    <button data-action="revcomp">RevComp</button>
+    <button data-action="listgenes">Gene</button>
+    <button data-action="parsertest">Parser-Test</button>
+    <button data-action="clear">Clear</button>
+  </div>
+  <div class="dbg-log" id="dbg-log"></div>
+</div>
+
+<!-- Eruda für volles DevTools bei ?debug -->
+<script>
+  if (location.search.indexOf('debug') !== -1) {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/eruda';
+    s.onload = function() { if (window.eruda) eruda.init(); };
+    document.body.appendChild(s);
+  }
+</script>
+
+<script>
+// ============================================================================
+// Motif Finder v0.1
+// Infrastruktur-Release: Parser (GenBank, EMBL, FASTA+GFF), 2bit-Backend
+// ============================================================================
+
+const VERSION = 'v0.3.1';
+
+// ---------------------------------------------------------------------------
+// Logging
+// ---------------------------------------------------------------------------
+const dbgLog = document.getElementById('dbg-log');
+function log(msg, level) {
+  level = level || 'info';
+  const ts = new Date().toTimeString().split(' ')[0];
+  const div = document.createElement('div');
+  div.className = 'l-' + level;
+  div.innerHTML = '<span class="l-ts">' + ts + '</span>' + escapeHtml(msg);
+  dbgLog.appendChild(div);
+  dbgLog.scrollTop = dbgLog.scrollHeight;
+  if (level === 'err') console.error(msg);
+  else if (level === 'warn') console.warn(msg);
+  else console.log(msg);
+}
+function logPre(msg) {
+  const div = document.createElement('div');
+  div.className = 'l-info';
+  const pre = document.createElement('pre');
+  pre.textContent = msg;
+  div.appendChild(pre);
+  dbgLog.appendChild(div);
+  dbgLog.scrollTop = dbgLog.scrollHeight;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function setStatus(msg, level, showProgress) {
+  const el = document.getElementById('status');
+  el.className = 'status show ' + (level || 'info');
+  el.innerHTML = escapeHtml(msg) + (showProgress ? '<div class="progress-bar"><div id="progress-fill"></div></div>' : '');
+}
+function clearStatus() {
+  document.getElementById('status').className = 'status';
+}
+function setProgress(pct) {
+  const el = document.getElementById('progress-fill');
+  if (el) el.style.width = pct + '%';
+}
+
+// ---------------------------------------------------------------------------
+// 2bit Backend
+//   Eigenes schlankes Format. Header: [4 bytes length LE uint32]
+//   Payload: ceil(length/4) bytes, 2 bits pro Base (A=00 C=01 G=10 T=11)
+//   N-Blöcke: separate Liste [[start, len], ...]
+//   Soft-masked: nicht in v0.1
+// ---------------------------------------------------------------------------
+const BASE_TO_BITS = { A: 0, C: 1, G: 2, T: 3 };
+const BITS_TO_BASE = ['A', 'C', 'G', 'T'];
+const COMPLEMENT = { A: 'T', T: 'A', C: 'G', G: 'C', N: 'N',
+                     a: 't', t: 'a', c: 'g', g: 'c', n: 'n',
+                     R: 'Y', Y: 'R', S: 'S', W: 'W', K: 'M', M: 'K',
+                     B: 'V', V: 'B', D: 'H', H: 'D' };
+
+class TwoBit {
+  constructor(sequence) {
+    const upper = sequence.toUpperCase();
+    this.length = upper.length;
+    const bytes = new Uint8Array(Math.ceil(this.length / 4));
+    const nBlocks = [];
+    let inN = false, nStart = 0;
+    for (let i = 0; i < this.length; i++) {
+      const c = upper[i];
+      const bits = BASE_TO_BITS[c];
+      if (bits === undefined) {
+        // Non-ACGT. Als A speichern, in N-Block vermerken (einheitlich inkl. IUPAC).
+        bytes[i >> 2] |= 0 << ((3 - (i & 3)) * 2);
+        if (!inN) { inN = true; nStart = i; }
+      } else {
+        bytes[i >> 2] |= bits << ((3 - (i & 3)) * 2);
+        if (inN) { nBlocks.push([nStart, i - nStart]); inN = false; }
+      }
+    }
+    if (inN) nBlocks.push([nStart, this.length - nStart]);
+    this.data = bytes;
+    this.nBlocks = nBlocks;
+  }
+
+  // Random-Access: Substring von [start, start+len)
+  get(start, len) {
+    if (start < 0 || len < 0 || start + len > this.length) {
+      throw new Error('2bit out of range: start=' + start + ' len=' + len + ' total=' + this.length);
+    }
+    const out = new Array(len);
+    for (let i = 0; i < len; i++) {
+      const pos = start + i;
+      const bits = (this.data[pos >> 2] >> ((3 - (pos & 3)) * 2)) & 0x3;
+      out[i] = BITS_TO_BASE[bits];
+    }
+    // N-Blöcke einblenden
+    for (const [ns, nl] of this.nBlocks) {
+      if (ns >= start + len) break;
+      if (ns + nl <= start) continue;
+      const from = Math.max(ns, start) - start;
+      const to = Math.min(ns + nl, start + len) - start;
+      for (let i = from; i < to; i++) out[i] = 'N';
+    }
+    return out.join('');
+  }
+
+  // Reverse-Complement von [start, start+len)
+  revcomp(start, len) {
+    const s = this.get(start, len);
+    let r = '';
+    for (let i = s.length - 1; i >= 0; i--) {
+      r += COMPLEMENT[s[i]] || 'N';
+    }
+    return r;
+  }
+
+  // Für Debug
+  sizeBytes() { return this.data.byteLength; }
+}
+
+// ---------------------------------------------------------------------------
+// GenBank Parser
+// ---------------------------------------------------------------------------
+function parseGenBank(text) {
+  const lines = text.split(/\r?\n/);
+  const result = {
+    format: 'genbank',
+    organism: null,
+    accession: null,
+    definition: null,
+    length: 0,
+    topology: null,
+    features: [],
+    sequence: ''
+  };
+
+  let section = null; // 'header', 'features', 'origin'
+  let currentFeature = null;
+  let seqBuf = [];
+  let featIndent = -1;
+  let pendingQualifierKey = null;
+  let pendingQualifierValue = null;
+
+  const flushQualifier = () => {
+    if (currentFeature && pendingQualifierKey !== null) {
+      let v = pendingQualifierValue || '';
+      // Strip surrounding quotes (toleriere fehlende)
+      if (v.startsWith('"')) v = v.slice(1);
+      if (v.endsWith('"')) v = v.slice(0, -1);
+      currentFeature.qualifiers[pendingQualifierKey] = v;
+    }
+    pendingQualifierKey = null;
+    pendingQualifierValue = null;
+  };
+
+  const flushFeature = () => {
+    flushQualifier();
+    if (currentFeature) result.features.push(currentFeature);
+    currentFeature = null;
+  };
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    if (!line) continue;
+
+    if (line.startsWith('LOCUS')) {
+      // LOCUS   NC_000964  4215606 bp  DNA  circular  BCT  03-NOV-2020
+      const m = line.match(/^LOCUS\s+(\S+)\s+(\d+)\s+bp/);
+      if (m) {
+        result.accession = m[1];
+        result.length = parseInt(m[2], 10);
+      }
+      if (/\scircular\s/i.test(line)) result.topology = 'circular';
+      else if (/\slinear\s/i.test(line)) result.topology = 'linear';
+      section = 'header';
+    } else if (line.startsWith('DEFINITION')) {
+      result.definition = line.substring(12).trim();
+    } else if (line.startsWith('ACCESSION')) {
+      if (!result.accession) {
+        const parts = line.substring(12).trim().split(/\s+/);
+        if (parts[0]) result.accession = parts[0];
+      }
+    } else if (line.startsWith('  ORGANISM')) {
+      result.organism = line.substring(12).trim();
+    } else if (line.startsWith('FEATURES')) {
+      section = 'features';
+      continue;
+    } else if (line.startsWith('ORIGIN')) {
+      flushFeature();
+      section = 'origin';
+      continue;
+    } else if (line.startsWith('//')) {
+      section = null;
+    } else if (section === 'features') {
+      // Feature-Zeile-Klassifizierung:
+      //   Typ 1: "     CDS             1..1440"   -> Indent + Feature-Typ + Location
+      //   Typ 2: "                     /gene=\"dnaA\""  -> Indent + Qualifier (startet mit /)
+      //   Typ 3: "                     xxx continuation"  -> Fortsetzung einer Location oder eines Qualifier-Wertes
+      const indentMatch = line.match(/^(\s*)(.*)$/);
+      if (!indentMatch) continue;
+      const indent = indentMatch[1].length;
+      const content = indentMatch[2];
+      if (!content) continue;
+
+      // Feature-Indent initialisieren (GenBank: typischerweise 5)
+      if (featIndent === -1 && !content.startsWith('/')) featIndent = indent;
+
+      if (content.startsWith('/')) {
+        // Qualifier-Zeile
+        flushQualifier();
+        const eqIdx = content.indexOf('=');
+        if (eqIdx === -1) {
+          // Flag-Qualifier ohne Wert: /pseudo
+          pendingQualifierKey = content.substring(1);
+          pendingQualifierValue = '';
+        } else {
+          pendingQualifierKey = content.substring(1, eqIdx);
+          pendingQualifierValue = content.substring(eqIdx + 1);
+        }
+      } else if (indent === featIndent) {
+        // Neues Feature — content ist "TYPE   location"
+        const tokMatch = content.match(/^(\S+)\s+(.+)$/);
+        if (!tokMatch) continue;
+        flushFeature();
+        const type = tokMatch[1];
+        const loc = tokMatch[2].trim();
+        currentFeature = {
+          type,
+          location: loc,
+          strand: loc.includes('complement(') ? -1 : 1,
+          start: 0, end: 0,
+          qualifiers: {}
+        };
+      } else {
+        // Fortsetzung: entweder Qualifier-Wert oder Location
+        if (pendingQualifierKey !== null) {
+          const cont = content.trim();
+          if (pendingQualifierValue && !pendingQualifierValue.endsWith('"') && pendingQualifierValue.startsWith('"')) {
+            pendingQualifierValue += ' ' + cont;
+          } else if (pendingQualifierValue && pendingQualifierValue.startsWith('"') && pendingQualifierValue.endsWith('"')) {
+            // Bereits abgeschlossen — eigentlich sollte dann ein neuer Qualifier folgen, nicht Fortsetzung
+            pendingQualifierValue += cont;
+          } else {
+            // Unquoted (z.B. /codon_start=1 mehrzeilig, oder DB-xref-Listen)
+            pendingQualifierValue += cont;
+          }
+        } else if (currentFeature) {
+          currentFeature.location += content.trim();
+          if (currentFeature.location.includes('complement(')) currentFeature.strand = -1;
+        }
+      }
+    } else if (section === 'origin') {
+      // 61 acgtacgt acgtacgt ...
+      const cleaned = line.replace(/[\s\d]/g, '');
+      if (cleaned) seqBuf.push(cleaned);
+    }
+  }
+
+  flushFeature();
+  result.sequence = seqBuf.join('');
+
+  // Location zu start/end parsen (für jedes Feature)
+  for (const f of result.features) {
+    const loc = parseLocation(f.location);
+    f.start = loc.start;
+    f.end = loc.end;
+    f.strand = loc.strand;
+    f.segments = loc.segments;
+  }
+
+  if (!result.length && result.sequence) result.length = result.sequence.length;
+  return result;
+}
+
+// Location-Parser: "complement(123..456)", "join(1..100,200..300)", "1..100"
+function parseLocation(locStr) {
+  const s = locStr.trim();
+  let strand = 1;
+  let inner = s;
+  if (inner.startsWith('complement(')) {
+    strand = -1;
+    inner = inner.substring(11, inner.lastIndexOf(')'));
+  }
+  let segments = [];
+  if (inner.startsWith('join(') || inner.startsWith('order(')) {
+    const open = inner.indexOf('(');
+    inner = inner.substring(open + 1, inner.lastIndexOf(')'));
+    const parts = splitCommasRespectingParens(inner);
+    for (const p of parts) {
+      const seg = parseLocation(p);
+      segments.push(...(seg.segments.length ? seg.segments : [[seg.start, seg.end]]));
+    }
+  } else {
+    // "123..456" oder "<123..>456" oder "123^124" oder "123"
+    const cleaned = inner.replace(/[<>]/g, '');
+    const rangeMatch = cleaned.match(/^(\d+)\.\.(\d+)$/);
+    const pointMatch = cleaned.match(/^(\d+)$/);
+    const caretMatch = cleaned.match(/^(\d+)\^(\d+)$/);
+    if (rangeMatch) {
+      segments.push([parseInt(rangeMatch[1], 10), parseInt(rangeMatch[2], 10)]);
+    } else if (pointMatch) {
+      const p = parseInt(pointMatch[1], 10);
+      segments.push([p, p]);
+    } else if (caretMatch) {
+      segments.push([parseInt(caretMatch[1], 10), parseInt(caretMatch[2], 10)]);
+    }
+  }
+  if (segments.length === 0) {
+    return { start: 0, end: 0, strand, segments: [] };
+  }
+  const starts = segments.map(s => s[0]);
+  const ends = segments.map(s => s[1]);
+  return {
+    start: Math.min(...starts),
+    end: Math.max(...ends),
+    strand,
+    segments
+  };
+}
+
+function splitCommasRespectingParens(s) {
+  const out = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+    else if (c === ',' && depth === 0) {
+      out.push(s.substring(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(s.substring(start));
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// EMBL Parser
+// ---------------------------------------------------------------------------
+function parseEmbl(text) {
+  const lines = text.split(/\r?\n/);
+  const result = {
+    format: 'embl',
+    organism: null,
+    accession: null,
+    definition: null,
+    length: 0,
+    topology: null,
+    features: [],
+    sequence: ''
+  };
+
+  let section = null;
+  let currentFeature = null;
+  let pendingQualifierKey = null;
+  let pendingQualifierValue = null;
+  let seqBuf = [];
+
+  const flushQualifier = () => {
+    if (currentFeature && pendingQualifierKey !== null) {
+      let v = pendingQualifierValue || '';
+      if (v.startsWith('"')) v = v.slice(1);
+      if (v.endsWith('"')) v = v.slice(0, -1);
+      currentFeature.qualifiers[pendingQualifierKey] = v;
+    }
+    pendingQualifierKey = null;
+    pendingQualifierValue = null;
+  };
+  const flushFeature = () => {
+    flushQualifier();
+    if (currentFeature) result.features.push(currentFeature);
+    currentFeature = null;
+  };
+
+  for (const line of lines) {
+    if (line.length < 2) continue;
+    const code = line.substring(0, 2);
+    const rest = line.substring(5); // Spalte 6 beginnt Daten in EMBL
+
+    if (code === 'ID') {
+      // ID   AL009126; SV 3; circular; genomic DNA; STD; PRO; 4215606 BP.
+      const m = rest.match(/^(\S+?);/);
+      if (m) result.accession = m[1];
+      const bpm = rest.match(/(\d+)\s*BP/i);
+      if (bpm) result.length = parseInt(bpm[1], 10);
+      if (/circular/i.test(rest)) result.topology = 'circular';
+      else if (/linear/i.test(rest)) result.topology = 'linear';
+    } else if (code === 'AC') {
+      if (!result.accession) {
+        const acc = rest.split(';')[0].trim();
+        if (acc) result.accession = acc;
+      }
+    } else if (code === 'DE') {
+      result.definition = (result.definition ? result.definition + ' ' : '') + rest.trim();
+    } else if (code === 'OS') {
+      result.organism = (result.organism ? result.organism + ' ' : '') + rest.trim();
+    } else if (code === 'FH') {
+      section = 'features';
+    } else if (code === 'FT') {
+      // EMBL Feature-Table. Spalte 6+ ist der Inhalt (rest).
+      // Feature-Header: "CDS             complement(1234..5678)"  — Typ + whitespace + Location
+      // Qualifier:      "                /gene=\"dnaA\""          — nur mit / am Start
+      // Fortsetzung:    "                continuation-text"
+      const ftContent = rest;
+      const trimmed = ftContent.trim();
+      if (!trimmed) continue;
+
+      // Feature-Header vs. Qualifier/Continuation über Indentation:
+      // Wenn das erste nicht-whitespace Zeichen an Position 0 von rest steht (d.h. kein Leading-Whitespace in rest), ist es ein Feature-Header
+      const hasLeadingSpace = ftContent.length > 0 && ftContent[0] === ' ';
+
+      if (!hasLeadingSpace && !trimmed.startsWith('/')) {
+        // Feature-Header — Form: "TYPE   location"
+        const tokMatch = ftContent.match(/^(\S+)\s+(.+)$/);
+        if (tokMatch) {
+          flushFeature();
+          const loc = tokMatch[2].trim();
+          currentFeature = {
+            type: tokMatch[1],
+            location: loc,
+            strand: loc.includes('complement(') ? -1 : 1,
+            start: 0, end: 0,
+            qualifiers: {}
+          };
+        }
+      } else if (trimmed.startsWith('/')) {
+        flushQualifier();
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx === -1) {
+          pendingQualifierKey = trimmed.substring(1);
+          pendingQualifierValue = '';
+        } else {
+          pendingQualifierKey = trimmed.substring(1, eqIdx);
+          pendingQualifierValue = trimmed.substring(eqIdx + 1);
+        }
+      } else {
+        // Fortsetzung
+        if (pendingQualifierKey !== null) {
+          if (pendingQualifierValue && !pendingQualifierValue.endsWith('"') && pendingQualifierValue.startsWith('"')) {
+            pendingQualifierValue += ' ' + trimmed;
+          } else {
+            pendingQualifierValue += trimmed;
+          }
+        } else if (currentFeature) {
+          currentFeature.location += trimmed;
+          if (currentFeature.location.includes('complement(')) currentFeature.strand = -1;
+        }
+      }
+    } else if (code === 'SQ') {
+      flushFeature();
+      section = 'sequence';
+    } else if (code === '  ' && section === 'sequence') {
+      const cleaned = line.replace(/[\s\d]/g, '');
+      if (cleaned) seqBuf.push(cleaned);
+    } else if (code === '//') {
+      section = null;
+    }
+  }
+
+  flushFeature();
+  result.sequence = seqBuf.join('');
+
+  for (const f of result.features) {
+    const loc = parseLocation(f.location);
+    f.start = loc.start;
+    f.end = loc.end;
+    f.strand = loc.strand;
+    f.segments = loc.segments;
+  }
+
+  if (!result.length && result.sequence) result.length = result.sequence.length;
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// FASTA Parser
+// ---------------------------------------------------------------------------
+function parseFasta(text) {
+  const lines = text.split(/\r?\n/);
+  const records = [];
+  let current = null;
+  for (const line of lines) {
+    if (line.startsWith('>')) {
+      if (current) records.push(current);
+      const header = line.substring(1).trim();
+      const id = header.split(/\s+/)[0];
+      current = { id, header, seq: [] };
+    } else if (current && line) {
+      current.seq.push(line.trim());
+    }
+  }
+  if (current) records.push(current);
+  for (const r of records) r.sequence = r.seq.join('');
+  return records;
+}
+
+// ---------------------------------------------------------------------------
+// GFF Parser
+// ---------------------------------------------------------------------------
+function parseGff(text) {
+  const lines = text.split(/\r?\n/);
+  const features = [];
+  for (const line of lines) {
+    if (!line || line.startsWith('#')) continue;
+    const cols = line.split('\t');
+    if (cols.length < 8) continue;
+    const [seqid, source, type, startStr, endStr, score, strand, phase, attrStr] = cols;
+    const attrs = {};
+    if (attrStr) {
+      for (const pair of attrStr.split(';')) {
+        const eq = pair.indexOf('=');
+        if (eq === -1) continue;
+        const k = pair.substring(0, eq).trim();
+        const v = pair.substring(eq + 1).trim();
+        attrs[k] = decodeURIComponent(v);
+      }
+    }
+    features.push({
+      seqid,
+      type,
+      start: parseInt(startStr, 10),
+      end: parseInt(endStr, 10),
+      strand: strand === '-' ? -1 : 1,
+      location: startStr + '..' + endStr,
+      segments: [[parseInt(startStr, 10), parseInt(endStr, 10)]],
+      qualifiers: {
+        locus_tag: attrs.locus_tag || attrs.ID || null,
+        gene: attrs.gene || attrs.Name || null,
+        product: attrs.product || null
+      }
+    });
+  }
+  return features;
+}
+
+function combineFastaGff(fastaRecs, gffFeatures) {
+  // Ersten FASTA-Record als Hauptsequenz nehmen (bakterielle Einzelchromosome)
+  if (fastaRecs.length === 0) throw new Error('FASTA enthält keine Sequenzen');
+  const main = fastaRecs[0];
+  const relevantFeatures = gffFeatures.filter(f => f.seqid === main.id || fastaRecs.length === 1);
+  return {
+    format: 'fasta+gff',
+    organism: main.header,
+    accession: main.id,
+    definition: main.header,
+    length: main.sequence.length,
+    topology: null,
+    features: relevantFeatures,
+    sequence: main.sequence
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Format-Detection
+// ---------------------------------------------------------------------------
+function detectFormat(text, filename) {
+  const head = text.substring(0, 500);
+  if (head.startsWith('LOCUS') || /^\s*LOCUS/m.test(head)) return 'genbank';
+  if (/^ID\s+/m.test(head)) return 'embl';
+  if (head.startsWith('>')) return 'fasta';
+  if (head.startsWith('##gff') || /^[^\t]+\t[^\t]+\t[^\t]+\t\d+\t\d+/m.test(head)) return 'gff';
+  // Fallback via Filename
+  const lower = (filename || '').toLowerCase();
+  if (lower.match(/\.(gb|gbk|gbff)$/)) return 'genbank';
+  if (lower.match(/\.embl$/)) return 'embl';
+  if (lower.match(/\.(fa|fasta|fna)$/)) return 'fasta';
+  if (lower.match(/\.(gff|gff3)$/)) return 'gff';
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Daten-Layer: mf
+// ---------------------------------------------------------------------------
+const mf = {
+  genome: null,   // { accession, organism, definition, length, topology, features }
+  twobit: null,   // TwoBit-Instanz
+  sourceInfo: null, // { source: 'file'|'ncbi'|'ena', name, sha256, bytes }
+};
+
+async function setGenome(parsed, sourceInfo) {
+  if (!parsed.sequence || parsed.sequence.length === 0) {
+    throw new Error('Keine Sequenz im Genom gefunden');
+  }
+  mf.twobit = new TwoBit(parsed.sequence);
+  mf.genome = {
+    accession: parsed.accession,
+    organism: parsed.organism,
+    definition: parsed.definition,
+    length: mf.twobit.length,
+    topology: parsed.topology,
+    format: parsed.format,
+    features: parsed.features || []
+  };
+  mf.sourceInfo = sourceInfo || null;
+
+  // v0.2: Genom-Komposition berechnen (für Zufallserwartung)
+  mf.genome.composition = computeComposition(mf.twobit);
+  // v0.3.1: GC-Skew einmalig berechnen
+  mf.genome.gcSkew = computeGCSkew(mf.twobit, 10000, 1000);
+  // v0.2: Gen-Index für schnelle Distanz-Suche
+  mf.genome.geneIndex = buildGeneIndex(mf.genome.features);
+
+  const geneCount = mf.genome.features.filter(f => f.type === 'gene').length;
+  const cdsCount = mf.genome.features.filter(f => f.type === 'CDS').length;
+
+  renderGenomeInfo(geneCount, cdsCount);
+  log('Genom geladen: ' + (mf.genome.accession || '?') + ', ' + mf.genome.length + ' bp, ' +
+       mf.genome.features.length + ' Features (' + geneCount + ' genes, ' + cdsCount + ' CDS)', 'ok');
+  const c = mf.genome.composition;
+  log('Komposition: A=' + (c.A * 100).toFixed(1) + '% C=' + (c.C * 100).toFixed(1) +
+      '% G=' + (c.G * 100).toFixed(1) + '% T=' + (c.T * 100).toFixed(1) +
+      '% (GC=' + ((c.G + c.C) * 100).toFixed(1) + '%)', 'info');
+
+  // v0.2: Motiv-Sektion einblenden
+  document.getElementById('motif-section').classList.add('show');
+  if (motifs.length === 0) {
+    // Erst-Lauf: σB-Promotor als sinnvoller Default
+    addMotif(defaultSigBMotif());
+  } else {
+    // bestehende Motive haben jetzt einen Genom-Kontext, Vorschau aktualisieren
+    motifs.forEach(m => updateMotifPreview(m.id));
+  }
+}
+
+function renderGenomeInfo(geneCount, cdsCount) {
+  const grid = document.getElementById('info-grid');
+  const featCounts = {};
+  for (const f of mf.genome.features) featCounts[f.type] = (featCounts[f.type] || 0) + 1;
+  const featSummary = Object.entries(featCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => k + ': ' + v).join(', ');
+  const rows = [
+    ['Organismus', mf.genome.organism || '—'],
+    ['Accession', mf.genome.accession || '—'],
+    ['Definition', mf.genome.definition || '—'],
+    ['Länge', mf.genome.length.toLocaleString('de-DE') + ' bp'],
+    ['Topologie', mf.genome.topology || '—'],
+    ['Format', mf.genome.format],
+    ['Features', featSummary],
+    ['2bit-Größe', mf.twobit.sizeBytes().toLocaleString('de-DE') + ' bytes (' +
+      (mf.twobit.sizeBytes() / mf.twobit.length * 8).toFixed(2) + ' bits/base)'],
+    ['Quelle', mf.sourceInfo ? (mf.sourceInfo.source + ': ' + mf.sourceInfo.name) : '—']
+  ];
+  grid.innerHTML = '';
+  for (const [k, v] of rows) {
+    const kEl = document.createElement('div');
+    kEl.className = 'k'; kEl.textContent = k;
+    const vEl = document.createElement('div');
+    vEl.className = 'v'; vEl.textContent = v;
+    grid.appendChild(kEl);
+    grid.appendChild(vEl);
+  }
+  document.getElementById('genome-info').classList.add('show');
+}
+
+// ---------------------------------------------------------------------------
+// File-Loading
+// ---------------------------------------------------------------------------
+async function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('FileReader-Fehler: ' + file.name));
+    reader.readAsText(file);
+  });
+}
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList);
+  if (files.length === 0) return;
+
+  clearStatus();
+  setStatus('Lese ' + files.length + ' Datei(en)...', 'info');
+
+  try {
+    // Klassifizierung: brauchen wir FASTA+GFF Paar, oder ein Standalone-File?
+    const classified = [];
+    for (const f of files) {
+      const text = await readFileText(f);
+      const fmt = detectFormat(text, f.name);
+      classified.push({ file: f, text, format: fmt });
+      log('Datei ' + f.name + ': erkanntes Format = ' + (fmt || 'unbekannt'), fmt ? 'info' : 'warn');
+    }
+
+    const fastas = classified.filter(c => c.format === 'fasta');
+    const gffs = classified.filter(c => c.format === 'gff');
+    const gbs = classified.filter(c => c.format === 'genbank');
+    const embls = classified.filter(c => c.format === 'embl');
+
+    let parsed = null;
+    let sourceInfo = null;
+
+    if (gbs.length >= 1) {
+      parsed = parseGenBank(gbs[0].text);
+      sourceInfo = { source: 'file', name: gbs[0].file.name, bytes: gbs[0].text.length };
+    } else if (embls.length >= 1) {
+      parsed = parseEmbl(embls[0].text);
+      sourceInfo = { source: 'file', name: embls[0].file.name, bytes: embls[0].text.length };
+    } else if (fastas.length >= 1 && gffs.length >= 1) {
+      const fastaRecs = parseFasta(fastas[0].text);
+      const gffFeats = parseGff(gffs[0].text);
+      parsed = combineFastaGff(fastaRecs, gffFeats);
+      sourceInfo = { source: 'file', name: fastas[0].file.name + ' + ' + gffs[0].file.name,
+                     bytes: fastas[0].text.length + gffs[0].text.length };
+    } else if (fastas.length >= 1) {
+      const fastaRecs = parseFasta(fastas[0].text);
+      parsed = combineFastaGff(fastaRecs, []);
+      sourceInfo = { source: 'file', name: fastas[0].file.name, bytes: fastas[0].text.length };
+      log('FASTA ohne GFF geladen — keine Feature-Annotation verfügbar', 'warn');
+    } else {
+      throw new Error('Kein unterstütztes Format erkannt. Ziehe .gb / .embl / .fa+.gff auf die Drop-Zone.');
+    }
+
+    await setGenome(parsed, sourceInfo);
+    setStatus('Genom erfolgreich geladen: ' + (parsed.accession || parsed.organism || 'unbekannt'), 'ok');
+  } catch (err) {
+    log('Fehler beim Laden: ' + err.message, 'err');
+    setStatus('Fehler: ' + err.message, 'err');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Accession-Abruf (NCBI / ENA)
+// ---------------------------------------------------------------------------
+function guessSource(accession) {
+  const a = accession.trim().toUpperCase();
+  if (/^(NC_|NZ_|NG_|NM_|NR_|NP_|XM_|XR_|YP_|CP_?\d|GCF_)/.test(a)) return 'ncbi';
+  if (/^(AL|AM|AP|AJ|CR|CT|CU|FM|FN|FP|FR|FO|HE|HF|HG|LN|LM|LR|LS|LT|OU|OW|OX|OY|OZ|U\d|X\d|Y\d|Z\d)/.test(a)) return 'ena';
+  return 'ncbi'; // Default: NCBI versuchen
+}
+
+async function fetchAccession() {
+  const acc = document.getElementById('accession-input').value.trim();
+  if (!acc) { setStatus('Bitte Accession angeben', 'warn'); return; }
+  let source = document.getElementById('source-select').value;
+  if (source === 'auto') source = guessSource(acc);
+
+  const btn = document.getElementById('accession-fetch');
+  btn.disabled = true;
+  clearStatus();
+  setStatus('Lade ' + acc + ' von ' + source.toUpperCase() + '...', 'info', true);
+  log('Fetch: ' + acc + ' via ' + source, 'info');
+
+  try {
+    let text, url, format;
+    if (source === 'ncbi') {
+      url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=' +
+            encodeURIComponent(acc) + '&rettype=gbwithparts&retmode=text';
+      format = 'genbank';
+    } else {
+      url = 'https://www.ebi.ac.uk/ena/browser/api/embl/' + encodeURIComponent(acc) + '?lineLimit=100000000';
+      format = 'embl';
+    }
+    log('URL: ' + url, 'info');
+    text = await fetchWithProgress(url);
+    if (!text || text.length < 100) throw new Error('Antwort zu kurz (' + (text ? text.length : 0) + ' bytes)');
+    if (text.includes('<ERROR>') || text.includes('error:')) {
+      // NCBI-Fehlerseite
+      log('Server-Fehler: ' + text.substring(0, 200), 'err');
+      throw new Error('Server meldete Fehler. Prüfe Accession.');
+    }
+    let parsed;
+    if (format === 'genbank') parsed = parseGenBank(text);
+    else parsed = parseEmbl(text);
+
+    // Bakterielle RefSeq-Records enthalten manchmal keine Inline-Sequenz
+    // (CONTIG-Statement verweist auf separate Sequenz). Fallback: FASTA nachladen.
+    if (!parsed.sequence || parsed.sequence.length === 0) {
+      log('Keine Inline-Sequenz im Record — hole FASTA separat', 'warn');
+      setStatus('Hole Sequenz separat...', 'info', true);
+      let fastaUrl;
+      if (source === 'ncbi') {
+        fastaUrl = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=' +
+                   encodeURIComponent(acc) + '&rettype=fasta&retmode=text';
+      } else {
+        fastaUrl = 'https://www.ebi.ac.uk/ena/browser/api/fasta/' + encodeURIComponent(acc) + '?lineLimit=100000000';
+      }
+      log('FASTA-URL: ' + fastaUrl, 'info');
+      const fastaText = await fetchWithProgress(fastaUrl);
+      const fastaRecs = parseFasta(fastaText);
+      if (fastaRecs.length === 0 || !fastaRecs[0].sequence) {
+        throw new Error('FASTA-Sequenz ebenfalls leer');
+      }
+      parsed.sequence = fastaRecs[0].sequence;
+      if (!parsed.length) parsed.length = parsed.sequence.length;
+      log('Sequenz nachgeladen: ' + parsed.sequence.length + ' bp', 'ok');
+    }
+
+    await setGenome(parsed, { source, name: acc, bytes: text.length });
+    setStatus('Genom geladen: ' + acc, 'ok');
+  } catch (err) {
+    log('Fetch-Fehler: ' + err.message, 'err');
+    setStatus('Fehler beim Abruf: ' + err.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function fetchWithProgress(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('HTTP ' + response.status + ' ' + response.statusText);
+  const contentLength = parseInt(response.headers.get('Content-Length') || '0', 10);
+  if (!contentLength || !response.body) {
+    // Kein Streaming möglich, direkt text()
+    setProgress(50);
+    const text = await response.text();
+    setProgress(100);
+    return text;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (contentLength) setProgress((received / contentLength) * 100);
+  }
+  const merged = new Uint8Array(received);
+  let off = 0;
+  for (const c of chunks) { merged.set(c, off); off += c.length; }
+  return new TextDecoder('utf-8').decode(merged);
+}
+
+// ---------------------------------------------------------------------------
+// UI-Events
+// ---------------------------------------------------------------------------
+const dz = document.getElementById('dropzone');
+const fi = document.getElementById('file-input');
+dz.addEventListener('click', (e) => { if (e.target.tagName !== 'INPUT') fi.click(); });
+fi.addEventListener('change', () => handleFiles(fi.files));
+dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragging'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragging'));
+dz.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dz.classList.remove('dragging');
+  if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+});
+
+document.getElementById('accession-fetch').addEventListener('click', fetchAccession);
+document.getElementById('accession-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') fetchAccession();
+});
+
+// Debug-Panel
+const dbgPanel = document.getElementById('debug-panel');
+document.getElementById('dbg-toggle').addEventListener('click', () => {
+  dbgPanel.classList.toggle('collapsed');
+  document.getElementById('dbg-chevron').textContent = dbgPanel.classList.contains('collapsed') ? '▲' : '▼';
+});
+
+document.querySelectorAll('#debug-panel .dbg-actions button').forEach(btn => {
+  btn.addEventListener('click', () => handleDebugAction(btn.dataset.action));
+});
+
+function handleDebugAction(action) {
+  if (action === 'clear') {
+    dbgLog.innerHTML = '';
+    return;
+  }
+  if (!mf.genome) {
+    log('Kein Genom geladen', 'warn');
+    return;
+  }
+  if (action === 'stats') {
+    const featTypes = {};
+    for (const f of mf.genome.features) featTypes[f.type] = (featTypes[f.type] || 0) + 1;
+    logPre(JSON.stringify({
+      accession: mf.genome.accession,
+      organism: mf.genome.organism,
+      length: mf.genome.length,
+      topology: mf.genome.topology,
+      format: mf.genome.format,
+      features_total: mf.genome.features.length,
+      feature_types: featTypes,
+      twobit_bytes: mf.twobit.sizeBytes(),
+      n_blocks: mf.twobit.nBlocks.length
+    }, null, 2));
+  } else if (action === 'getseq') {
+    const startStr = prompt('Start-Position (1-basiert)?', '1');
+    if (!startStr) return;
+    const lenStr = prompt('Länge?', '60');
+    if (!lenStr) return;
+    const start = parseInt(startStr, 10) - 1;
+    const len = parseInt(lenStr, 10);
+    try {
+      const s = mf.twobit.get(start, len);
+      logPre('Sequenz [' + (start + 1) + '..' + (start + len) + ']:\n' + s);
+    } catch (e) { log(e.message, 'err'); }
+  } else if (action === 'revcomp') {
+    const startStr = prompt('Start-Position (1-basiert)?', '1');
+    if (!startStr) return;
+    const lenStr = prompt('Länge?', '60');
+    if (!lenStr) return;
+    const start = parseInt(startStr, 10) - 1;
+    const len = parseInt(lenStr, 10);
+    try {
+      const s = mf.twobit.get(start, len);
+      const rc = mf.twobit.revcomp(start, len);
+      logPre('Forward:  ' + s + '\nRevComp:  ' + rc);
+    } catch (e) { log(e.message, 'err'); }
+  } else if (action === 'listgenes') {
+    const startStr = prompt('Start-Position (1-basiert)?', '1');
+    if (!startStr) return;
+    const endStr = prompt('End-Position (1-basiert)?', '10000');
+    if (!endStr) return;
+    const start = parseInt(startStr, 10);
+    const end = parseInt(endStr, 10);
+    const genes = mf.genome.features.filter(f =>
+      (f.type === 'gene' || f.type === 'CDS') && f.end >= start && f.start <= end
+    ).slice(0, 30);
+    const lines = genes.map(g => {
+      const lt = g.qualifiers.locus_tag || '';
+      const nm = g.qualifiers.gene || '';
+      const pr = (g.qualifiers.product || '').substring(0, 50);
+      return (g.strand === 1 ? '+' : '-') + ' ' +
+             String(g.start).padStart(8) + '..' + String(g.end).padEnd(8) + ' ' +
+             g.type.padEnd(6) + ' ' + lt.padEnd(14) + ' ' + nm.padEnd(8) + ' ' + pr;
+    });
+    logPre('Features in [' + start + '..' + end + ']:\n' + lines.join('\n') +
+           (genes.length === 30 ? '\n... (beschränkt auf 30)' : ''));
+  } else if (action === 'parsertest') {
+    runParserSelftest();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Parser-Selbsttest
+// ---------------------------------------------------------------------------
+function runParserSelftest() {
+  log('Parser-Selbsttest läuft...', 'info');
+  let pass = 0, fail = 0;
+  const check = (name, cond, detail) => {
+    if (cond) { pass++; log('  ✓ ' + name, 'ok'); }
+    else { fail++; log('  ✗ ' + name + (detail ? ' — ' + detail : ''), 'err'); }
+  };
+
+  // 2bit Roundtrip
+  const seq = 'ATGCGTACGTTANGCATCGTACGTATCG';
+  const tb = new TwoBit(seq);
+  const decoded = tb.get(0, seq.length);
+  check('2bit Roundtrip Länge', decoded.length === seq.length);
+  // Alle Positionen außer N-Blöcke
+  let matches = 0;
+  for (let i = 0; i < seq.length; i++) if (seq[i].toUpperCase() === decoded[i]) matches++;
+  check('2bit Roundtrip Zeichen', matches === seq.length, matches + '/' + seq.length);
+
+  // Revcomp: ATGC -> GCAT (complement: TACG, reverse: GCAT)
+  check('2bit revcomp ATGC', tb.revcomp(0, 4) === 'GCAT', 'expected GCAT got ' + tb.revcomp(0, 4));
+
+  // Random Access
+  check('2bit random', tb.get(4, 4) === 'GTAC', 'got ' + tb.get(4, 4));
+
+  // GenBank-Mini
+  const gb = `LOCUS       TESTSEQ                  50 bp    DNA     linear   BCT 01-JAN-2026
+DEFINITION  Test sequence.
+ACCESSION   TESTSEQ
+SOURCE      Testus organismus
+  ORGANISM  Testus organismus
+FEATURES             Location/Qualifiers
+     source          1..50
+                     /organism="Testus organismus"
+     gene            5..20
+                     /gene="geneA"
+                     /locus_tag="TEST_0001"
+     CDS             complement(25..40)
+                     /gene="geneB"
+                     /locus_tag="TEST_0002"
+                     /product="hypothetical protein"
+ORIGIN
+        1 atgcgtacgt tagcatcgta cgtatcgatc gtacgatcgt acgatcgtac
+//`;
+  const gbParsed = parseGenBank(gb);
+  check('GenBank accession', gbParsed.accession === 'TESTSEQ');
+  check('GenBank length', gbParsed.length === 50);
+  check('GenBank organism', gbParsed.organism === 'Testus organismus');
+  check('GenBank features count', gbParsed.features.length === 3, 'got ' + gbParsed.features.length);
+  const geneA = gbParsed.features.find(f => f.qualifiers.gene === 'geneA');
+  check('GenBank geneA existiert', !!geneA);
+  check('GenBank geneA start/end', geneA && geneA.start === 5 && geneA.end === 20);
+  check('GenBank geneA strand', geneA && geneA.strand === 1);
+  const geneB = gbParsed.features.find(f => f.qualifiers.gene === 'geneB');
+  check('GenBank geneB complement', geneB && geneB.strand === -1);
+  check('GenBank sequence', gbParsed.sequence.length === 50);
+
+  // EMBL-Mini
+  const embl = `ID   TESTSEQ; SV 1; linear; genomic DNA; STD; PRO; 50 BP.
+AC   TESTSEQ;
+DE   Test sequence.
+OS   Testus organismus
+FH   Key             Location/Qualifiers
+FT   source          1..50
+FT                   /organism="Testus organismus"
+FT   gene            5..20
+FT                   /gene="geneA"
+FT                   /locus_tag="TEST_0001"
+FT   CDS             complement(25..40)
+FT                   /gene="geneB"
+FT                   /product="hypothetical protein"
+SQ   Sequence 50 BP;
+     atgcgtacgt tagcatcgta cgtatcgatc gtacgatcgt acgatcgtac        50
+//`;
+  const emParsed = parseEmbl(embl);
+  check('EMBL accession', emParsed.accession === 'TESTSEQ');
+  check('EMBL length', emParsed.length === 50);
+  check('EMBL features', emParsed.features.length === 3, 'got ' + emParsed.features.length);
+  const emGeneB = emParsed.features.find(f => f.qualifiers.gene === 'geneB');
+  check('EMBL geneB complement', emGeneB && emGeneB.strand === -1);
+
+  // FASTA+GFF
+  const fasta = '>chr1 Test\nATGCGTACGTTAGCATCGTACGTATCGATCGTACGATCGTACGATCGTAC\n';
+  const gff = `##gff-version 3
+chr1\ttest\tgene\t5\t20\t.\t+\t.\tID=gene1;Name=geneA;locus_tag=TEST_0001
+chr1\ttest\tCDS\t25\t40\t.\t-\t0\tID=cds1;gene=geneB;product=hypothetical protein
+`;
+  const fastaRecs = parseFasta(fasta);
+  const gffFeats = parseGff(gff);
+  const combined = combineFastaGff(fastaRecs, gffFeats);
+  check('FASTA+GFF length', combined.length === 50);
+  check('FASTA+GFF features', combined.features.length === 2);
+  const fgGeneB = combined.features.find(f => f.qualifiers.gene === 'geneB');
+  check('FASTA+GFF geneB strand', fgGeneB && fgGeneB.strand === -1);
+
+  // Join-Location (spliced)
+  const gbJoin = `LOCUS       TEST2                    100 bp    DNA     linear   BCT 01-JAN-2026
+FEATURES             Location/Qualifiers
+     CDS             join(10..30,50..80)
+                     /gene="spliced"
+ORIGIN
+        1 atgcgtacgt tagcatcgta cgtatcgatc gtacgatcgt acgatcgtac gtacgtacgt
+       61 acgtacgtac gtacgtacgt acgtacgtac
+//`;
+  const gbj = parseGenBank(gbJoin);
+  const sp = gbj.features.find(f => f.qualifiers.gene === 'spliced');
+  check('GenBank join segments', sp && sp.segments.length === 2, 'segs=' + (sp ? sp.segments.length : '?'));
+  check('GenBank join start/end span', sp && sp.start === 10 && sp.end === 80);
+
+  log('Selbsttest fertig: ' + pass + ' ok, ' + fail + ' fehlgeschlagen',
+      fail === 0 ? 'ok' : 'err');
+}
+
+// ---------------------------------------------------------------------------
+// Global-API für Dev-Konsole
+// ---------------------------------------------------------------------------
+window.mf = {
+  getSequence: (start, end) => {
+    if (!mf.twobit) throw new Error('Kein Genom geladen');
+    // 1-basiert, inklusiv (biologisch), konvertiere für 2bit (0-basiert, exklusiv)
+    return mf.twobit.get(start - 1, end - start + 1);
+  },
+  revcomp: (start, len) => {
+    if (!mf.twobit) throw new Error('Kein Genom geladen');
+    return mf.twobit.revcomp(start - 1, len);
+  },
+  listGenes: (start, end) => {
+    if (!mf.genome) throw new Error('Kein Genom geladen');
+    return mf.genome.features.filter(f =>
+      (f.type === 'gene' || f.type === 'CDS') && f.end >= start && f.start <= end
+    );
+  },
+  stats: () => ({
+    genome: mf.genome ? {
+      accession: mf.genome.accession,
+      organism: mf.genome.organism,
+      length: mf.genome.length,
+      features: mf.genome.features.length
+    } : null,
+    twobit: mf.twobit ? {
+      bytes: mf.twobit.sizeBytes(),
+      nBlocks: mf.twobit.nBlocks.length
+    } : null
+  }),
+  version: VERSION,
+  _internal: { mf, TwoBit, parseGenBank, parseEmbl, parseFasta, parseGff, combineFastaGff }
+};
+
+// ============================================================================
+// v0.2: Motiv-Suche
+// ============================================================================
+
+// ---------- IUPAC ----------
+const IUPAC = {
+  A: ['A'], C: ['C'], G: ['G'], T: ['T'], U: ['T'],
+  R: ['A','G'], Y: ['C','T'], S: ['G','C'], W: ['A','T'], K: ['G','T'], M: ['A','C'],
+  B: ['C','G','T'], D: ['A','G','T'], H: ['A','C','T'], V: ['A','C','G'],
+  N: ['A','C','G','T']
+};
+const IUPAC_DESC = {
+  A: 'A', C: 'C', G: 'G', T: 'T',
+  R: 'A or G (puRine)',
+  Y: 'C or T (pYrimidine)',
+  S: 'G or C (Strong)',
+  W: 'A or T (Weak)',
+  K: 'G or T (Keto)',
+  M: 'A or C (aMino)',
+  B: 'C/G/T (not A)',
+  D: 'A/G/T (not C)',
+  H: 'A/C/T (not G)',
+  V: 'A/C/G (not T)',
+  N: 'A/C/G/T (any)'
+};
+
+function renderIupacLegend() {
+  const root = document.getElementById('iupac-legend');
+  root.innerHTML = '';
+  for (const [code, desc] of Object.entries(IUPAC_DESC)) {
+    const item = document.createElement('div');
+    item.className = 'iup-item';
+    const c = document.createElement('span'); c.className = 'code'; c.textContent = code;
+    const d = document.createElement('span'); d.textContent = desc;
+    item.appendChild(c); item.appendChild(d);
+    root.appendChild(item);
+  }
+}
+
+// IUPAC-Konsensus normalisieren und validieren
+// Konsensus-Parser: erkennt feste IUPAC-Blöcke und variable Spacer.
+// Spacer-Notationen: N12-16, N12..16, N{12,16}, N12 (fest)
+// Beispiel: "CGTTTT N12-16 GGGWAW" -> {
+//   blocks: [
+//     {type:'fixed', seq:'CGTTTT'},
+//     {type:'spacer', min:12, max:16},
+//     {type:'fixed', seq:'GGGWAW'}
+//   ],
+//   minLength: 6+12+6=24, maxLength: 6+16+6=28
+// }
+function normalizeConsensus(s) {
+  if (!s) return { ok: false, error: 'Konsensus eingeben', value: '' };
+
+  // Whitespaces entfernen, Großbuchstaben
+  const raw = s.toUpperCase().replace(/\s+/g, '');
+  if (raw.length === 0) return { ok: false, error: 'Konsensus eingeben', value: '' };
+
+  // Tokenize: scanne Zeichen für Zeichen, erkenne Spacer-Patterns
+  const blocks = [];
+  let i = 0;
+  let currentFixed = '';
+
+  const flushFixed = () => {
+    if (currentFixed) { blocks.push({ type: 'fixed', seq: currentFixed }); currentFixed = ''; }
+  };
+
+  while (i < raw.length) {
+    const c = raw[i];
+    // Prüfe auf Spacer-Pattern: N gefolgt von Ziffern oder Klammern
+    // Möglichkeiten:
+    //   N{a,b}
+    //   N12-16  oder  N12..16
+    //   N12     (fest)
+    if (c === 'N' && i + 1 < raw.length && (raw[i+1] === '{' || /\d/.test(raw[i+1]))) {
+      // Match versuchen
+      const rest = raw.substring(i);
+      // N{a,b}
+      let m = rest.match(/^N\{(\d+),(\d+)\}/);
+      if (m) {
+        flushFixed();
+        const min = parseInt(m[1], 10), max = parseInt(m[2], 10);
+        if (min > max) return { ok: false, error: 'Spacer-Range ungültig: N{' + min + ',' + max + '}', value: raw };
+        blocks.push({ type: 'spacer', min, max });
+        i += m[0].length;
+        continue;
+      }
+      // N12-16  oder  N12..16
+      m = rest.match(/^N(\d+)(?:-|\.\.)(\d+)/);
+      if (m) {
+        flushFixed();
+        const min = parseInt(m[1], 10), max = parseInt(m[2], 10);
+        if (min > max) return { ok: false, error: 'Spacer-Range ungültig: N' + min + '-' + max, value: raw };
+        blocks.push({ type: 'spacer', min, max });
+        i += m[0].length;
+        continue;
+      }
+      // N12 (fest) — aber NUR wenn die Ziffern eindeutig zu N gehören und nicht versehentlich
+      // Zwei Ziffern sind ein klares Spacer-Signal (kein einzelnes IUPAC-N gefolgt von Ziffern hat hier Sinn)
+      m = rest.match(/^N(\d+)/);
+      if (m) {
+        flushFixed();
+        const fixed = parseInt(m[1], 10);
+        blocks.push({ type: 'spacer', min: fixed, max: fixed });
+        i += m[0].length;
+        continue;
+      }
+    }
+    // Reguläres IUPAC-Zeichen
+    if (!IUPAC[c]) {
+      return { ok: false, error: 'Ungültiges Zeichen: ' + c, value: raw };
+    }
+    currentFixed += c;
+    i++;
+  }
+  flushFixed();
+
+  if (blocks.length === 0) {
+    return { ok: false, error: 'Konsensus leer', value: raw };
+  }
+
+  // Validierungen:
+  // - Spacer am Anfang/Ende ist sinnlos (kein Anker)
+  if (blocks[0].type === 'spacer' || blocks[blocks.length - 1].type === 'spacer') {
+    return { ok: false, error: 'Spacer am Anfang oder Ende ist nicht erlaubt — fixe Submotive müssen flankieren', value: raw };
+  }
+  // - Zwei Spacer hintereinander unsinnig (theoretisch durch Parser nicht möglich, aber check)
+  for (let k = 1; k < blocks.length; k++) {
+    if (blocks[k].type === 'spacer' && blocks[k-1].type === 'spacer') {
+      return { ok: false, error: 'Zwei Spacer hintereinander', value: raw };
+    }
+  }
+
+  // Aggregierte Längen
+  let minLen = 0, maxLen = 0;
+  for (const b of blocks) {
+    if (b.type === 'fixed') { minLen += b.seq.length; maxLen += b.seq.length; }
+    else { minLen += b.min; maxLen += b.max; }
+  }
+
+  const hasSpacer = blocks.some(b => b.type === 'spacer');
+  // Kanonischer normalisierter String (für Anzeige & Speicherung)
+  const canonical = blocks.map(b =>
+    b.type === 'fixed' ? b.seq : ('N' + b.min + (b.min !== b.max ? '-' + b.max : ''))
+  ).join(' ');
+
+  return { ok: true, value: raw, blocks, minLen, maxLen, hasSpacer, canonical };
+}
+
+// ---------- Genom-Komposition ----------
+function computeComposition(tb) {
+  const counts = { A: 0, C: 0, G: 0, T: 0, N: 0 };
+  // 4 Basen pro Byte ausnutzen für Speed
+  const data = tb.data;
+  const len = tb.length;
+  // Inits
+  for (let i = 0; i < len; i++) {
+    const bits = (data[i >> 2] >> ((3 - (i & 3)) * 2)) & 0x3;
+    const b = ['A','C','G','T'][bits];
+    counts[b]++;
+  }
+  // N-Blöcke abziehen (da als A geschrieben aber eigentlich N)
+  for (const [ns, nl] of tb.nBlocks) {
+    counts.A -= nl;  // standardmäßig wurden Ns als A=00 kodiert
+    counts.N += nl;
+  }
+  const validTotal = counts.A + counts.C + counts.G + counts.T;
+  return {
+    A: counts.A / validTotal,
+    C: counts.C / validTotal,
+    G: counts.G / validTotal,
+    T: counts.T / validTotal,
+    N: counts.N,
+    validTotal
+  };
+}
+
+// Wahrscheinlichkeit dass eine zufällige Position das IUPAC-Symbol matcht
+function iupacProb(code, comp) {
+  const bases = IUPAC[code];
+  if (!bases) return 0;
+  let p = 0;
+  for (const b of bases) p += comp[b];
+  return p;
+}
+
+// Erwartete Trefferzahl für IUPAC-Konsensus + erlaubte Mismatches
+// Formel: pro Mismatch-Anzahl j: C(L,j) * (Match-Probs für L-j Positionen) * (Mismatch-Probs für j)
+// Pro Position: pMatch = iupacProb(c, comp), pMismatch = 1 - pMatch
+// Für genaue Berechnung müssen wir aber über die Positionsauswahl summieren weil die p_i positionsabhängig sind.
+// Berechnet die Match-Wahrscheinlichkeit pro Position für einen einzelnen fixed-Block
+// (DP über erlaubte Mismatches innerhalb des Blocks).
+// Gibt zurück: Array f[j] = Wkt dass an einer Random-Position im Block genau j Mismatches.
+function blockMatchDist(seq, comp, maxMismatches) {
+  const L = seq.length;
+  const k = Math.min(maxMismatches, L);
+  let f = new Array(k + 1).fill(0);
+  f[0] = 1;
+  for (let i = 0; i < L; i++) {
+    const p = iupacProb(seq[i], comp);
+    const fNew = new Array(k + 1).fill(0);
+    for (let j = 0; j <= k; j++) {
+      if (f[j] === 0) continue;
+      fNew[j] += f[j] * p;
+      if (j + 1 <= k) fNew[j + 1] += f[j] * (1 - p);
+    }
+    f = fNew;
+  }
+  return f;
+}
+
+// Konvolution zweier Mismatch-Verteilungen (Mismatches summieren sich)
+function convDist(a, b, maxK) {
+  const out = new Array(maxK + 1).fill(0);
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === 0) continue;
+    for (let j = 0; j < b.length; j++) {
+      if (i + j > maxK) break;
+      out[i + j] += a[i] * b[j];
+    }
+  }
+  return out;
+}
+
+// Erweitert: akzeptiert String ODER parsed-Konsensus-Objekt {blocks, ...}
+function expectedHitsForMotif(consensus, mismatches, comp, genomeLength, bothStrands) {
+  // Wenn String: parsen
+  let parsed;
+  if (typeof consensus === 'string') {
+    parsed = normalizeConsensus(consensus);
+    if (!parsed.ok) return 0;
+  } else {
+    parsed = consensus;
+  }
+  const blocks = parsed.blocks;
+  if (!blocks || blocks.length === 0) return 0;
+
+  // Gesamterwartung = Summe über alle Spacer-Längen-Kombinationen.
+  // Pro Längen-Kombination: Faltung der Mismatch-Verteilungen aller fixed-Blöcke.
+  // Keine Spacer? → einfache DP über alle Positionen.
+  if (!parsed.hasSpacer) {
+    // Alle Blocks sind fixed, einfach konkatenieren
+    const seq = blocks.map(b => b.seq).join('');
+    const dist = blockMatchDist(seq, comp, mismatches);
+    let pHit = 0;
+    for (let j = 0; j <= mismatches && j < dist.length; j++) pHit += dist[j];
+    const L = seq.length;
+    return pHit * (genomeLength - L + 1) * (bothStrands ? 2 : 1);
+  }
+
+  // Mit Spacern: Verteilung pro fixed-Block einmalig berechnen
+  const fixedDists = [];
+  for (const b of blocks) {
+    if (b.type === 'fixed') fixedDists.push(blockMatchDist(b.seq, comp, mismatches));
+  }
+  // Anzahl Spacer-Länge-Varianten = Produkt der Range-Größen
+  // Pro Variante: feste Länge L = sum(fixed.length) + sum(spacer-Länge-Wahl)
+  // Match-Wkt pro Variante = Konvolution der fixed-Distributionen, p(matches ≤ mismatches)
+  // Die Match-Wkt ist unabhängig von der Spacer-Länge (Spacer matchen immer, beliebige Basen).
+  // Daher: konvolviere die fixed-Dists einmal:
+  let combined = [1];
+  for (const d of fixedDists) combined = convDist(combined, d, mismatches);
+  let pHit = 0;
+  for (let j = 0; j <= mismatches && j < combined.length; j++) pHit += combined[j];
+
+  // Summe über alle Spacer-Längen-Kombinationen
+  // Vereinfachung: Anzahl Kombinationen = Produkt der (max-min+1).
+  // Pro Kombi mit Gesamtlänge L: Position-Anzahl = genomeLength - L + 1
+  // Lange Spacer reduzieren Position-Anzahl leicht. Bei großen Genomen vernachlässigbar,
+  // aber wir machen's korrekt:
+  const spacers = blocks.filter(b => b.type === 'spacer');
+  const fixedLen = blocks.filter(b => b.type === 'fixed').reduce((s, b) => s + b.seq.length, 0);
+
+  // Iteriere alle Kombinationen — bei wenigen Spacern ohnehin klein
+  // Für jeden Spacer alle Längen durchlaufen, position-counts addieren
+  let totalPositions = 0;
+  function recurse(idx, sumSpacerLen) {
+    if (idx >= spacers.length) {
+      const L = fixedLen + sumSpacerLen;
+      const positions = Math.max(0, genomeLength - L + 1);
+      totalPositions += positions;
+      return;
+    }
+    const sp = spacers[idx];
+    for (let l = sp.min; l <= sp.max; l++) recurse(idx + 1, sumSpacerLen + l);
+  }
+  recurse(0, 0);
+
+  return pHit * totalPositions * (bothStrands ? 2 : 1);
+}
+
+// ---------- Gen-Index für Distanz-Berechnung ----------
+function buildGeneIndex(features) {
+  // Nur 'gene' und 'CDS' verwenden, sortiert nach start
+  const genes = features.filter(f => f.type === 'gene' || f.type === 'CDS')
+                       .map(f => ({ start: f.start, end: f.end, strand: f.strand,
+                                    name: f.qualifiers.gene || f.qualifiers.locus_tag || '?',
+                                    locus_tag: f.qualifiers.locus_tag,
+                                    type: f.type }))
+                       .sort((a, b) => a.start - b.start);
+  return genes;
+}
+
+// Klassifikation eines Treffers im Gen-Kontext
+function classifyHit(start, end, strand, geneIndex) {
+  // Binäre Suche nach Genen die den Treffer überlappen
+  let intragenic = false;
+  let containingGene = null;
+  // Linear-Scan reicht für moderate Genzahl, Treffer-Anzahl ist begrenzt
+  // Für 4500 Gene * 2400 Treffer = 10.8M ops, ginge im Worker
+  for (const g of geneIndex) {
+    if (g.end < start) continue;
+    if (g.start > end) break;
+    if (g.start <= start && g.end >= end) {
+      intragenic = true; containingGene = g; break;
+    }
+    if (g.start <= end && g.end >= start) {
+      // Teilüberlapp
+      intragenic = true; containingGene = g; break;
+    }
+  }
+  // Nächstes downstream-Gen (zum Berechnen der Distanz zu Gen-Start auf gleichem oder anderem Strand)
+  // Für intergene Treffer suchen wir das nächstgelegene Gen-Start in der Nähe
+  let nearestGeneStart = null;
+  let distanceToGeneStart = null;
+  let strandRelToGene = null;
+  if (containingGene) {
+    nearestGeneStart = containingGene;
+    // Distanz zum eigenen Gen-Start
+    if (containingGene.strand === 1) {
+      distanceToGeneStart = start - containingGene.start;
+    } else {
+      distanceToGeneStart = containingGene.end - end;
+    }
+    strandRelToGene = (strand === containingGene.strand) ? 'sense' : 'antisense';
+  } else {
+    // Suche das nächste Gen-Start (vor oder nach dem Treffer)
+    let bestDist = Infinity, bestGene = null;
+    for (const g of geneIndex) {
+      // Position des Gen-Starts (TSS-Approximation)
+      const geneStartPos = g.strand === 1 ? g.start : g.end;
+      // Wir interessieren uns für den nächsten Gen-Start "downstream" des Treffers
+      // Aber bei Promotor-Suche ist das nächste Gen-Start in der Strang-Richtung wichtig
+      // Pragmatisch: nächste Gen-Start-Position absolut
+      const treffermitte = (start + end) / 2;
+      const d = Math.abs(geneStartPos - treffermitte);
+      if (d < bestDist) {
+        bestDist = d;
+        bestGene = g;
+      }
+    }
+    if (bestGene) {
+      nearestGeneStart = bestGene;
+      // Vorzeichen: positiv = upstream des Gen-Starts (typischer Promotor)
+      // negativ = downstream des Gen-Starts (innerhalb oder dahinter)
+      if (bestGene.strand === 1) {
+        distanceToGeneStart = start - bestGene.start;
+      } else {
+        distanceToGeneStart = bestGene.end - end;
+      }
+      strandRelToGene = (strand === bestGene.strand) ? 'sense' : 'antisense';
+    }
+  }
+  return {
+    intragenic,
+    nearestGene: nearestGeneStart ? nearestGeneStart.name : null,
+    nearestGeneLocusTag: nearestGeneStart ? nearestGeneStart.locus_tag : null,
+    distanceToGeneStart,
+    strandRelToGene
+  };
+}
+
+// ---------- Motiv-Datenmodell ----------
+const MOTIF_PALETTE = ['#e85a4f','#7ab8f5','#81c784','#ffd54f','#f48fb1','#4dd0e1','#ffb74d','#ba68c8'];
+let motifs = [];
+let motifSeq = 0;
+
+function newMotif() {
+  motifSeq++;
+  // Nächste Farbe = nächste freie aus Palette
+  const usedColors = new Set(motifs.map(m => m.color));
+  let color = MOTIF_PALETTE.find(c => !usedColors.has(c)) || MOTIF_PALETTE[(motifSeq - 1) % MOTIF_PALETTE.length];
+  return {
+    id: 'motif_' + motifSeq,
+    name: 'Motiv ' + motifSeq,
+    color,
+    muted: false,
+    mode: 'regex_consensus',
+    consensus: '',
+    mismatches: 0,
+    strand: 'both',
+    forceScan: false, // override für rote Ampel
+    results: null     // wird bei Scan gefüllt
+  };
+}
+
+function addMotif(presetMotif) {
+  const m = presetMotif || newMotif();
+  motifs.push(m);
+  renderMotifList();
+}
+
+// Default-Preset für den allerersten Aufruf nach Genom-Load:
+// σB-Promotor-Konsensus für B. subtilis, sodass der Erstkontakt
+// sofort zu einem sinnvollen Scan-Ergebnis führt.
+function defaultSigBMotif() {
+  motifSeq++;
+  return {
+    id: 'motif_' + motifSeq,
+    name: 'σB-Promotor',
+    color: MOTIF_PALETTE[0],
+    muted: false,
+    mode: 'regex_consensus',
+    consensus: 'GTTTAA N10-12 GGGWAW',
+    mismatches: 1,
+    strand: 'both',
+    forceScan: false,
+    results: null
+  };
+}
+
+function removeMotif(id) {
+  motifs = motifs.filter(m => m.id !== id);
+  renderMotifList();
+}
+
+function renderMotifList() {
+  const root = document.getElementById('motif-list');
+  root.innerHTML = '';
+  for (const m of motifs) {
+    root.appendChild(buildMotifCard(m));
+    updateMotifPreview(m.id);
+  }
+}
+
+function buildMotifCard(m) {
+  const card = document.createElement('div');
+  card.className = 'motif-card' + (m.muted ? ' muted' : '');
+  card.id = 'card_' + m.id;
+  card.style.borderLeftColor = m.color;
+
+  // Row 1: Name, Color, Mute, Remove
+  const row1 = document.createElement('div'); row1.className = 'row';
+
+  const nameInp = document.createElement('input');
+  nameInp.type = 'text'; nameInp.name = 'name'; nameInp.value = m.name;
+  nameInp.addEventListener('input', () => { m.name = nameInp.value; });
+
+  const colorSwatch = document.createElement('span');
+  colorSwatch.className = 'color-swatch';
+  colorSwatch.style.background = m.color;
+  const palette = document.createElement('div'); palette.className = 'palette';
+  for (const c of MOTIF_PALETTE) {
+    const sw = document.createElement('span'); sw.className = 'swatch'; sw.style.background = c;
+    sw.addEventListener('click', () => {
+      m.color = c;
+      colorSwatch.style.background = c;
+      card.style.borderLeftColor = c;
+      palette.classList.remove('show');
+    });
+    palette.appendChild(sw);
+  }
+  colorSwatch.addEventListener('click', () => palette.classList.toggle('show'));
+
+  const muteBtn = document.createElement('button'); muteBtn.className = 'action';
+  muteBtn.textContent = m.muted ? 'Unmute' : 'Mute';
+  muteBtn.addEventListener('click', () => {
+    m.muted = !m.muted;
+    muteBtn.textContent = m.muted ? 'Unmute' : 'Mute';
+    card.classList.toggle('muted', m.muted);
+  });
+
+  const removeBtn = document.createElement('button'); removeBtn.className = 'action danger';
+  removeBtn.textContent = 'Entfernen';
+  removeBtn.addEventListener('click', () => removeMotif(m.id));
+
+  row1.appendChild(nameInp);
+  row1.appendChild(colorSwatch);
+  row1.appendChild(palette);
+  row1.appendChild(muteBtn);
+  row1.appendChild(removeBtn);
+
+  // Row 2: Konsensus-Eingabe + IUPAC-Tooltip
+  const row2 = document.createElement('div'); row2.className = 'row';
+  const consensusLbl = document.createElement('label');
+  consensusLbl.innerHTML = 'Konsensus <span class="info-icon" data-tt="konsensus">i</span>';
+  const consInp = document.createElement('input');
+  consInp.type = 'text'; consInp.name = 'consensus'; consInp.value = m.consensus;
+  consInp.placeholder = 'z.B. TTGACA   oder   CGTTTT N12-16 GGGWAW';
+  consInp.spellcheck = false; consInp.autocapitalize = 'characters';
+  consInp.addEventListener('input', () => {
+    m.consensus = consInp.value;
+    updateMotifPreview(m.id);
+  });
+  row2.appendChild(consensusLbl);
+  row2.appendChild(consInp);
+
+  // Row 3: Mismatches, Strand, Scan
+  const row3 = document.createElement('div'); row3.className = 'row';
+  const mmLbl = document.createElement('label');
+  mmLbl.innerHTML = 'Mismatches <span class="info-icon" data-tt="mismatches">i</span>';
+  const mmInp = document.createElement('input');
+  mmInp.type = 'number'; mmInp.min = 0; mmInp.max = 5; mmInp.value = m.mismatches;
+  mmInp.style.width = '60px';
+  mmInp.addEventListener('input', () => {
+    m.mismatches = parseInt(mmInp.value, 10) || 0;
+    updateMotifPreview(m.id);
+  });
+
+  const strandLbl = document.createElement('label');
+  strandLbl.innerHTML = 'Strang <span class="info-icon" data-tt="strang">i</span>';
+  const strandSel = document.createElement('select');
+  for (const [v, t] of [['both', 'beide'], ['+', '+'], ['-', '−']]) {
+    const o = document.createElement('option'); o.value = v; o.textContent = t;
+    if (v === m.strand) o.selected = true;
+    strandSel.appendChild(o);
+  }
+  strandSel.addEventListener('change', () => {
+    m.strand = strandSel.value;
+    updateMotifPreview(m.id);
+  });
+
+  const scanBtn = document.createElement('button');
+  scanBtn.className = 'action scan-btn';
+  scanBtn.textContent = 'Scan';
+  scanBtn.addEventListener('click', () => scanMotif(m.id));
+
+  row3.appendChild(mmLbl);
+  row3.appendChild(mmInp);
+  row3.appendChild(strandLbl);
+  row3.appendChild(strandSel);
+  row3.appendChild(scanBtn);
+
+  // Live-Vorschau Block
+  const preview = document.createElement('div');
+  preview.className = 'preview'; preview.id = 'preview_' + m.id;
+
+  // Resultate-Block
+  const results = document.createElement('div');
+  results.className = 'results-section'; results.id = 'results_' + m.id;
+
+  card.appendChild(row1);
+  card.appendChild(row2);
+  card.appendChild(row3);
+  card.appendChild(preview);
+  card.appendChild(results);
+
+  // Wenn schon Resultate da: rendern
+  if (m.results) renderResults(m);
+
+  return card;
+}
+
+function updateMotifPreview(id) {
+  const m = motifs.find(x => x.id === id);
+  if (!m) return;
+  const root = document.getElementById('preview_' + id);
+  if (!root) return;
+  if (!mf.genome) {
+    root.innerHTML = '<span style="color:var(--fg-mute)">Genom laden für Vorschau</span>';
+    return;
+  }
+  const norm = normalizeConsensus(m.consensus);
+  if (!norm.ok) {
+    root.innerHTML = '<span style="color:var(--fg-mute)">' + (norm.error || 'Konsensus eingeben') + '</span>';
+    return;
+  }
+  const both = m.strand === 'both';
+  const expected = expectedHitsForMotif(norm, m.mismatches, mf.genome.composition, mf.genome.length, both);
+
+  // Ampel
+  let ampel, label;
+  if (expected < 500)        { ampel = 'green';  label = 'spezifisch'; }
+  else if (expected < 5000)  { ampel = 'yellow'; label = 'moderat'; }
+  else if (expected < 50000) { ampel = 'orange'; label = 'unspezifisch'; }
+  else                       { ampel = 'red';    label = 'zu unspezifisch'; }
+
+  // Längen-Anzeige
+  let lengthLabel;
+  if (norm.minLen === norm.maxLen) lengthLabel = norm.minLen + ' bp';
+  else                              lengthLabel = norm.minLen + '–' + norm.maxLen + ' bp';
+
+  // Varianten-Schätzung: nur über fixierte Positionen (Spacer zählen nicht).
+  // L_fixed = Summe der fixed-Block-Längen.
+  let lFixed = 0;
+  for (const b of norm.blocks) if (b.type === 'fixed') lFixed += b.seq.length;
+  let variants = 0;
+  for (let j = 0; j <= Math.min(m.mismatches, lFixed); j++) {
+    variants += binomial(lFixed, j) * Math.pow(3, j);
+  }
+
+  // Spacer-Kombinationen (Information für User)
+  let spacerCombos = 1;
+  for (const b of norm.blocks) if (b.type === 'spacer') spacerCombos *= (b.max - b.min + 1);
+
+  let html = '';
+  html += '<div class="preview-row"><span>Konsensus</span><span class="v">' + escapeHtml(norm.canonical) + '</span></div>';
+  html += '<div class="preview-row"><span>Länge</span><span class="v">' + lengthLabel + '</span></div>';
+  if (norm.hasSpacer) {
+    html += '<div class="preview-row"><span>Spacer-Längen-Kombinationen</span><span class="v">' + spacerCombos + '</span></div>';
+  }
+  html += '<div class="preview-row"><span>Zufallserwartung <span class="info-icon" data-tt="zufall">i</span></span><span class="v">' +
+          (expected < 1 ? expected.toFixed(2) : Math.round(expected).toLocaleString('de-DE')) +
+          ' Treffer</span></div>';
+  html += '<div class="preview-row"><span>Varianten (Hamming ≤ ' + m.mismatches + ')</span><span class="v">' +
+          variants.toLocaleString('de-DE') + '</span></div>';
+  html += '<div class="preview-row"><span>Spezifität</span><span><span class="ampel ' + ampel + '">' + label + '</span></span></div>';
+  if (ampel === 'red' && !m.forceScan) {
+    html += '<div style="margin-top:6px;color:var(--err);font-size:11px">Scan blockiert. ';
+    html += '<button class="action" id="override_' + id + '">Trotzdem scannen</button></div>';
+  }
+  root.innerHTML = html;
+
+  // Override-Button verkabeln
+  const ovBtn = document.getElementById('override_' + id);
+  if (ovBtn) ovBtn.addEventListener('click', () => {
+    m.forceScan = true;
+    updateMotifPreview(id);
+  });
+
+  // Scan-Button enabled?
+  const card = document.getElementById('card_' + id);
+  if (card) {
+    const sb = card.querySelector('.scan-btn');
+    if (sb) sb.disabled = (ampel === 'red' && !m.forceScan) || norm.minLen === 0;
+  }
+}
+
+function binomial(n, k) {
+  if (k < 0 || k > n) return 0;
+  if (k === 0 || k === n) return 1;
+  k = Math.min(k, n - k);
+  let r = 1;
+  for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1);
+  return r;
+}
+
+// ---------- Scanner ----------
+function scanMotif(id) {
+  const m = motifs.find(x => x.id === id);
+  if (!m || !mf.twobit) return;
+  const norm = normalizeConsensus(m.consensus);
+  if (!norm.ok) return;
+
+  const card = document.getElementById('card_' + id);
+  const scanBtn = card.querySelector('.scan-btn');
+  scanBtn.disabled = true;
+  scanBtn.textContent = 'Scannt...';
+
+  const t0 = performance.now();
+  setTimeout(() => {
+    try {
+      const hits = runScan(norm, m.mismatches, m.strand, mf.twobit, mf.genome.geneIndex);
+      const t1 = performance.now();
+      m.results = {
+        hits,
+        consensus: norm.canonical,
+        consensusBlocks: norm.blocks,
+        hasSpacer: norm.hasSpacer,
+        mismatches: m.mismatches,
+        strand: m.strand,
+        scanDurationMs: Math.round(t1 - t0),
+        expected: expectedHitsForMotif(norm, m.mismatches, mf.genome.composition,
+                                        mf.genome.length, m.strand === 'both'),
+        sortBy: 'start', sortDir: 'asc',
+        filterIntergenicOnly: false
+      };
+      renderResults(m);
+    } catch (err) {
+      log('Scan-Fehler: ' + err.message, 'err');
+      console.error(err);
+    } finally {
+      scanBtn.disabled = false;
+      scanBtn.textContent = 'Scan';
+    }
+  }, 10);
+}
+
+// Konvertiert einen fixed-Block (IUPAC-String) in ein Allowed-Mask-Array
+function blockToAllowedMask(seq) {
+  const out = new Uint8Array(seq.length);
+  for (let i = 0; i < seq.length; i++) {
+    let mask = 0;
+    for (const b of IUPAC[seq[i]]) {
+      if (b === 'A') mask |= 1;
+      else if (b === 'C') mask |= 2;
+      else if (b === 'G') mask |= 4;
+      else if (b === 'T') mask |= 8;
+    }
+    out[i] = mask;
+  }
+  return out;
+}
+
+// Reverse-complement der Allowed-Maske (für Minus-Strang-Scan auf + Sequenz)
+function reverseComplementMask(mask) {
+  const out = new Uint8Array(mask.length);
+  const COMP = [0, 8, 4, 0, 2, 0, 0, 0, 1]; // bit-Mapping: 1<->8, 2<->4
+  for (let i = 0; i < mask.length; i++) {
+    const m = mask[mask.length - 1 - i];
+    let rc = 0;
+    if (m & 1) rc |= 8;
+    if (m & 2) rc |= 4;
+    if (m & 4) rc |= 2;
+    if (m & 8) rc |= 1;
+    out[i] = rc;
+  }
+  return out;
+}
+
+// Reverse einer Block-Liste (für Minus-Strang): Reihenfolge gespiegelt, fixed-Blöcke revcomp.
+// Spacer bleiben gleich.
+function reverseBlocksForMinusStrand(blocks) {
+  const reversed = [];
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i];
+    if (b.type === 'spacer') reversed.push({ type: 'spacer', min: b.min, max: b.max });
+    else reversed.push({ type: 'fixed', seq: revcompString(b.seq) });
+  }
+  return reversed;
+}
+
+function runScan(norm, mismatches, strand, twobit, geneIndex) {
+  // norm: { blocks, minLen, maxLen, hasSpacer, canonical }
+  const total = twobit.length;
+
+  // Sequenz-Bits einmal materialisieren
+  const seqBits = new Uint8Array(total);
+  const data = twobit.data;
+  for (let i = 0; i < total; i++) {
+    const bits = (data[i >> 2] >> ((3 - (i & 3)) * 2)) & 0x3;
+    seqBits[i] = 1 << bits;
+  }
+  for (const [ns, nl] of twobit.nBlocks) {
+    for (let i = ns; i < ns + nl; i++) seqBits[i] = 0;
+  }
+
+  const hitsPlus = [];
+  const hitsMinus = [];
+
+  if (strand === 'both' || strand === '+') {
+    scanWithBlocks(norm.blocks, seqBits, total, mismatches, hitsPlus, 1);
+  }
+  if (strand === 'both' || strand === '-') {
+    const rcBlocks = reverseBlocksForMinusStrand(norm.blocks);
+    scanWithBlocks(rcBlocks, seqBits, total, mismatches, hitsMinus, -1);
+  }
+
+  // Dedup: Treffer mit identischer Position+Länge auf + und − = palindromisch
+  const merged = [];
+  const minusByKey = new Map();
+  for (const h of hitsMinus) {
+    const k = h.start + ':' + h.end + ':' + (h.spacers || []).join(',');
+    minusByKey.set(k, h);
+  }
+  for (const h of hitsPlus) {
+    const k = h.start + ':' + h.end + ':' + (h.spacers || []).join(',');
+    if (minusByKey.has(k)) {
+      h.palindromic = true;
+      minusByKey.delete(k);
+    }
+    merged.push(h);
+  }
+  for (const h of minusByKey.values()) merged.push(h);
+
+  // Sequenzen + Klassifikation + Score
+  const consensusFixedLen = norm.blocks.filter(b => b.type === 'fixed')
+                                       .reduce((s, b) => s + b.seq.length, 0);
+  for (const h of merged) {
+    const fullSeq = twobit.get(h.start - 1, h.end - h.start + 1);
+    h.sequence = (h.strand === 1) ? fullSeq : revcompString(fullSeq);
+    const cl = classifyHit(h.start, h.end, h.strand, geneIndex);
+    h.intragenic = cl.intragenic;
+    h.nearestGene = cl.nearestGene;
+    h.distanceToGeneStart = cl.distanceToGeneStart;
+    h.strandRelToGene = cl.strandRelToGene;
+    h.score = consensusFixedLen - h.mismatches;
+    h.maxScore = consensusFixedLen;
+  }
+
+  merged.sort((a, b) => a.start - b.start);
+  return merged;
+}
+
+// Kern-Scanner: arbeitet mit einer Block-Liste an einem geg. Strang.
+// Strategie: an Position p den ersten fixed-Block versuchen → falls zu viele Mismatches, abbrechen.
+// Sonst rekursiv die nächsten Blöcke (Spacer + fixed) durchtesten.
+function scanWithBlocks(blocks, seqBits, total, mismatches, output, strandCode) {
+  // Pre-compute Allowed-Masks pro fixed-Block
+  const fixedMasks = blocks.map(b => b.type === 'fixed' ? blockToAllowedMask(b.seq) : null);
+
+  // Min und Max Gesamtlänge
+  let minLen = 0, maxLen = 0;
+  for (const b of blocks) {
+    if (b.type === 'fixed') { minLen += b.seq.length; maxLen += b.seq.length; }
+    else { minLen += b.min; maxLen += b.max; }
+  }
+
+  const positions = total - minLen + 1;
+  if (positions <= 0) return;
+
+  // Iterator-Funktion: testet ab Position p ob die Block-Liste matcht
+  // Kette: für jeden fixed-Block wird ab aktueller Position gematcht; danach Spacer-Loop.
+  // Wir tracken: aktuelle Position, akkumulierte Mismatches, Spacer-Längen-Liste.
+  function tryMatch(p) {
+    return matchFromBlock(0, p, 0, []);
+  }
+
+  function matchFromBlock(blockIdx, posInGenome, mmSoFar, spacersList) {
+    if (blockIdx >= blocks.length) {
+      // Ende erreicht — Treffer aufzeichnen
+      output.push({
+        start: spacersList.startPos !== undefined ? spacersList.startPos : (posInGenome - 0), // wird unten überschrieben
+        end: posInGenome, // 1-basiert: posInGenome ist Position nach letztem Block (exklusiv) - korrigiere
+        strand: strandCode,
+        mismatches: mmSoFar,
+        spacers: spacersList.slice() // Kopie
+      });
+      return;
+    }
+    const blk = blocks[blockIdx];
+    if (blk.type === 'fixed') {
+      const mask = fixedMasks[blockIdx];
+      const L = blk.seq.length;
+      if (posInGenome + L > total) return;
+      let mm = mmSoFar;
+      for (let i = 0; i < L; i++) {
+        const sb = seqBits[posInGenome + i];
+        if (sb === 0) return; // N: kein Match überhaupt
+        if ((sb & mask[i]) === 0) {
+          mm++;
+          if (mm > mismatches) return;
+        }
+      }
+      matchFromBlock(blockIdx + 1, posInGenome + L, mm, spacersList);
+    } else {
+      // Spacer: probiere alle Längen im Range
+      for (let len = blk.min; len <= blk.max; len++) {
+        if (posInGenome + len > total) break;
+        spacersList.push(len);
+        matchFromBlock(blockIdx + 1, posInGenome + len, mmSoFar, spacersList);
+        spacersList.pop();
+      }
+    }
+  }
+
+  // Wir können nicht direkt im Recursion start/end aufzeichnen, weil mehrere Treffer pro Startposition
+  // möglich sind (verschiedene Spacer-Längen). Lösung: Treffer-Aufnahme mit korrektem start/end.
+  // Refaktoriere: matchFromBlock akkumuliert und beim End-Block schreibt {start, end (computed), ...}.
+  output.length = 0; // reset für saubere Aufzeichnung
+  for (let p = 0; p < positions; p++) {
+    matchFromBlockInline(0, p, 0, [], p);
+  }
+
+  function matchFromBlockInline(blockIdx, posInGenome, mmSoFar, spacersList, startPos) {
+    if (blockIdx >= blocks.length) {
+      output.push({
+        start: startPos + 1,            // 1-basiert
+        end: posInGenome,                // letzte Position des Treffers (1-basiert inklusiv = posInGenome)
+        strand: strandCode,
+        mismatches: mmSoFar,
+        spacers: spacersList.slice()
+      });
+      return;
+    }
+    const blk = blocks[blockIdx];
+    if (blk.type === 'fixed') {
+      const mask = fixedMasks[blockIdx];
+      const L = blk.seq.length;
+      if (posInGenome + L > total) return;
+      let mm = mmSoFar;
+      for (let i = 0; i < L; i++) {
+        const sb = seqBits[posInGenome + i];
+        if (sb === 0) return;
+        if ((sb & mask[i]) === 0) {
+          mm++;
+          if (mm > mismatches) return;
+        }
+      }
+      matchFromBlockInline(blockIdx + 1, posInGenome + L, mm, spacersList, startPos);
+    } else {
+      for (let len = blk.min; len <= blk.max; len++) {
+        if (posInGenome + len > total) break;
+        spacersList.push(len);
+        matchFromBlockInline(blockIdx + 1, posInGenome + len, mmSoFar, spacersList, startPos);
+        spacersList.pop();
+      }
+    }
+  }
+}
+
+function revcompString(s) {
+  const comp = { A: 'T', T: 'A', C: 'G', G: 'C', N: 'N' };
+  let r = '';
+  for (let i = s.length - 1; i >= 0; i--) r += (comp[s[i]] || 'N');
+  return r;
+}
+
+// ---------- Resultate-Rendering ----------
+function renderResults(m) {
+  const root = document.getElementById('results_' + m.id);
+  if (!root) return;
+  if (!m.results) { root.classList.remove('show'); return; }
+  root.classList.add('show');
+
+  const r = m.results;
+  const all = r.hits;
+  const filtered = r.filterIntergenicOnly ? all.filter(h => !h.intragenic) : all;
+
+  // Statistik
+  const obs = all.length;
+  const exp = r.expected;
+  const ratio = exp > 0 ? obs / exp : 0;
+  const log2r = (obs > 0 && exp > 0) ? Math.log2(ratio) : null;
+  const z = exp > 0 ? (obs - exp) / Math.sqrt(exp) : 0;
+
+  // Konsensus-String mit Längen-Range
+  const lengthLabel = (r.consensusBlocks && r.hasSpacer)
+    ? (() => {
+        let mn = 0, mx = 0;
+        for (const b of r.consensusBlocks) {
+          if (b.type === 'fixed') { mn += b.seq.length; mx += b.seq.length; }
+          else { mn += b.min; mx += b.max; }
+        }
+        return mn + '–' + mx + ' bp';
+      })()
+    : (r.consensusBlocks ? (r.consensusBlocks.reduce((s,b)=>s+(b.type==='fixed'?b.seq.length:0),0) + ' bp')
+                         : (r.consensus.length + ' bp'));
+
+  let stats = '';
+  stats += '<div class="results-stats">';
+  stats += '<span class="k">Konsensus</span><span class="v">' + escapeHtml(r.consensus) + ' (' + lengthLabel + ', ≤' + r.mismatches + ' MM, Strang ' + r.strand + ')</span>';
+  stats += '<span class="k">Zufallserwartung <span class="info-icon" data-tt="zufall">i</span></span><span class="v">' +
+            Math.round(exp).toLocaleString('de-DE') + '</span>';
+  stats += '<span class="k">Gefunden</span><span class="v">' + obs.toLocaleString('de-DE') + '</span>';
+  let ratioLabel;
+  if (ratio >= 1) ratioLabel = 'Anreicherung';
+  else            ratioLabel = 'Verarmung';
+  stats += '<span class="k">' + ratioLabel + ' <span class="info-icon" data-tt="anreicherung">i</span></span><span class="v">' +
+            ratio.toFixed(2) + '× ' + (log2r !== null ? '(log₂ ' + (log2r >= 0 ? '+' : '') + log2r.toFixed(2) + ')' : '') +
+            (log2r !== null && log2r < -2 ? '<span class="badge-warn">stark verarmt — Selektion?</span>' : '') +
+            '</span>';
+  stats += '<span class="k">Z-Score <span class="info-icon" data-tt="zscore">i</span></span><span class="v">' +
+            (isFinite(z) ? z.toFixed(2) : '—') + '</span>';
+  stats += '<span class="k">Scan-Dauer</span><span class="v">' + r.scanDurationMs + ' ms</span>';
+  stats += '</div>';
+
+  // v0.3.1: Genom-Distribution-Canvas
+  stats += '<div class="genome-dist-container" id="dist_' + m.id + '">' +
+           '<canvas id="dist_canvas_' + m.id + '" class="genome-dist-canvas" title="Klick: zum nächsten Treffer in Tabelle springen"></canvas>' +
+           '</div>';
+
+  // Controls
+  stats += '<div class="results-controls">';
+  stats += '<label><input type="checkbox" id="filt_intergenic_' + m.id + '"' + (r.filterIntergenicOnly ? ' checked' : '') + '> nur intergenische Treffer</label>';
+  stats += '<button id="copy_tsv_' + m.id + '">TSV kopieren</button>';
+  stats += '<span style="color:var(--fg-mute)">' + filtered.length + ' angezeigt</span>';
+  stats += '</div>';
+
+  // Tabelle
+  const LIMIT = 1000;
+  const showHits = filtered.slice(0, LIMIT);
+
+  // Spacer-Blöcke ermitteln (für separate Spalten)
+  const spacerBlocks = (r.consensusBlocks || []).filter(b => b.type === 'spacer');
+  const spacerCount = spacerBlocks.length;
+
+  let table = '<table class="results-table"><thead><tr>';
+  // Checkbox-Spalte: zuerst, mit master-Toggle im Header
+  table += '<th class="col-sel"><input type="checkbox" class="row-checkbox" id="sel_master_' + m.id + '" title="Alle anzeigen / keine"></th>';
+  const cols = [
+    { k: 'start', t: 'Pos' },
+    { k: 'strand', t: 'Strang' },
+    { k: 'sequence', t: 'Sequenz' }
+  ];
+  // Eine Spalte pro Spacer
+  for (let si = 0; si < spacerCount; si++) {
+    const b = spacerBlocks[si];
+    const rangeLabel = (b.min === b.max) ? String(b.min) : (b.min + '–' + b.max);
+    cols.push({
+      k: 'spacer_' + si,
+      t: 'Spacer ' + (si + 1) + '<br><span style="font-size:10px;color:var(--fg-mute)">(' + rangeLabel + ')</span>'
+    });
+  }
+  cols.push({ k: 'score', t: 'Score' });
+  cols.push({ k: 'distanceToGeneStart', t: 'Δ Gen-Start' });
+  cols.push({ k: 'strandRelToGene', t: 'Strangbezug' });
+  cols.push({ k: 'context', t: 'Kontext' });
+  cols.push({ k: 'nearestGene', t: 'Gen' });
+  for (const c of cols) {
+    const sorted = (r.sortBy === c.k) ? ' class="sorted"' : '';
+    const arr = (r.sortBy === c.k) ? (r.sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+    table += '<th data-sort="' + c.k + '"' + sorted + '>' + c.t + arr + '</th>';
+  }
+  table += '</tr></thead><tbody>';
+  if (!r.selected) r.selected = new Set();
+  for (let hi = 0; hi < showHits.length; hi++) {
+    const h = showHits[hi];
+    const hitKey = hitKeyOf(h);
+    const isSelected = r.selected.has(hitKey);
+    table += '<tr>';
+    table += '<td class="col-sel"><input type="checkbox" class="row-checkbox row-sel-' + m.id + '" data-hkey="' + hitKey + '"' + (isSelected ? ' checked' : '') + '></td>';
+    table += '<td>' + h.start.toLocaleString('de-DE') + '</td>';
+    table += '<td>' + (h.strand === 1 ? '+' : '−') + (h.palindromic ? ' (pal)' : '') + '</td>';
+    table += '<td>' + colorizeBlockSequence(h, r.consensusBlocks) + '</td>';
+    for (let si = 0; si < spacerCount; si++) {
+      const v = (h.spacers && h.spacers[si] !== undefined) ? h.spacers[si] : '—';
+      table += '<td>' + v + '</td>';
+    }
+    table += '<td>' + h.score + '/' + h.maxScore + '</td>';
+    table += '<td>' + (h.distanceToGeneStart !== null ? (h.distanceToGeneStart >= 0 ? '+' : '') + h.distanceToGeneStart : '—') + '</td>';
+    table += '<td>' + (h.strandRelToGene || '—') + '</td>';
+    table += '<td><span class="ctx-pill ' + (h.intragenic ? 'intragenic' : 'intergenic') + '">' + (h.intragenic ? 'intra' : 'inter') + '</span></td>';
+    table += '<td>' + (h.nearestGene || '—') + '</td>';
+    table += '</tr>';
+  }
+  if (filtered.length > LIMIT) {
+    table += '<tr><td colspan="' + (cols.length + 1) + '" class="results-overflow">... ' + (filtered.length - LIMIT).toLocaleString('de-DE') + ' weitere Treffer ausgeblendet</td></tr>';
+  }
+  table += '</tbody></table>';
+
+  // Panel-Sektion: erst nach Tabelle gerendert, vom updatePanels gefüllt
+  const panelHtml = '<div class="panel-section" id="panels_' + m.id + '">' +
+                    '<div class="panel-section-header">' +
+                      '<span class="ps-title" id="panels_title_' + m.id + '">Panels</span>' +
+                      '<div class="ps-actions">' +
+                        '<button id="panels_clear_' + m.id + '">Auswahl löschen</button>' +
+                        '<button id="panels_toggle_' + m.id + '">Einklappen</button>' +
+                      '</div>' +
+                    '</div>' +
+                    '<div class="panel-list" id="panel_list_' + m.id + '"></div>' +
+                  '</div>';
+
+  root.innerHTML = stats + table + panelHtml;
+
+  // Event-Handlers
+  document.getElementById('filt_intergenic_' + m.id).addEventListener('change', (e) => {
+    r.filterIntergenicOnly = e.target.checked;
+    renderResults(m);
+  });
+  document.getElementById('copy_tsv_' + m.id).addEventListener('click', () => {
+    const spacerBlocks = (r.consensusBlocks || []).filter(b => b.type === 'spacer');
+    const header = ['#position','strand','sequence'];
+    for (let si = 0; si < spacerBlocks.length; si++) header.push('spacer_' + (si + 1));
+    header.push('score', 'distance_to_gene_start', 'strand_rel_to_gene', 'context', 'nearest_gene', 'palindromic');
+    const lines = [header.join('\t')];
+    for (const h of filtered) {
+      const row = [h.start, h.strand === 1 ? '+' : '-', h.sequence];
+      for (let si = 0; si < spacerBlocks.length; si++) {
+        row.push((h.spacers && h.spacers[si] !== undefined) ? h.spacers[si] : '');
+      }
+      row.push(h.score + '/' + h.maxScore);
+      row.push(h.distanceToGeneStart !== null ? h.distanceToGeneStart : '');
+      row.push(h.strandRelToGene || '');
+      row.push(h.intragenic ? 'intragenic' : 'intergenic');
+      row.push(h.nearestGene || '');
+      row.push(h.palindromic ? 'palindromic' : '');
+      lines.push(row.join('\t'));
+    }
+    const tsv = lines.join('\n');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tsv).then(
+        () => log('TSV (' + filtered.length + ' Zeilen) in Zwischenablage', 'ok'),
+        (e) => log('Clipboard-Fehler: ' + e, 'err')
+      );
+    } else {
+      log('Clipboard nicht verfügbar — TSV in Debug-Log', 'warn');
+      logPre(tsv.length > 4000 ? tsv.substring(0, 4000) + '\n[abgeschnitten]' : tsv);
+    }
+  });
+  // Sort-Header
+  for (const th of root.querySelectorAll('th[data-sort]')) {
+    th.addEventListener('click', () => {
+      const k = th.dataset.sort;
+      if (r.sortBy === k) r.sortDir = r.sortDir === 'asc' ? 'desc' : 'asc';
+      else { r.sortBy = k; r.sortDir = 'asc'; }
+      sortHits(r);
+      renderResults(m);
+    });
+  }
+
+  // Row-Checkbox-Handler
+  for (const cb of root.querySelectorAll('.row-sel-' + m.id)) {
+    cb.addEventListener('change', (e) => {
+      const k = e.target.dataset.hkey;
+      if (e.target.checked) r.selected.add(k);
+      else r.selected.delete(k);
+      updatePanels(m);
+      // Master-Checkbox-Status updaten
+      const master = document.getElementById('sel_master_' + m.id);
+      if (master) {
+        const total = root.querySelectorAll('.row-sel-' + m.id).length;
+        const checked = root.querySelectorAll('.row-sel-' + m.id + ':checked').length;
+        master.checked = (total > 0 && checked === total);
+        master.indeterminate = (checked > 0 && checked < total);
+      }
+    });
+  }
+  // Master-Checkbox: alle anzeigen / keine
+  const master = document.getElementById('sel_master_' + m.id);
+  if (master) {
+    master.addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      // Setze nur die SICHTBAREN Treffer (showHits, max LIMIT)
+      for (const h of showHits) {
+        const k = hitKeyOf(h);
+        if (checked) r.selected.add(k);
+        else r.selected.delete(k);
+      }
+      renderResults(m);
+    });
+  }
+
+  // Panel-Action-Buttons
+  const clearBtn = document.getElementById('panels_clear_' + m.id);
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    r.selected.clear();
+    renderResults(m);
+  });
+  const toggleBtn = document.getElementById('panels_toggle_' + m.id);
+  if (toggleBtn) toggleBtn.addEventListener('click', () => {
+    const list = document.getElementById('panel_list_' + m.id);
+    if (!list) return;
+    const isHidden = list.classList.toggle('hidden');
+    toggleBtn.textContent = isHidden ? 'Aufklappen' : 'Einklappen';
+    if (!isHidden) updatePanels(m);
+  });
+
+  // v0.3.1: Genom-Distribution rendern
+  const distCanvas = document.getElementById('dist_canvas_' + m.id);
+  if (distCanvas) {
+    requestAnimationFrame(() => {
+      const container = distCanvas.parentElement;
+      const w = container.clientWidth - 8;  // padding
+      const h = container.clientHeight - 8;
+      const dpr = window.devicePixelRatio || 1;
+      distCanvas.width = w * dpr;
+      distCanvas.height = h * dpr;
+      distCanvas.style.width = w + 'px';
+      distCanvas.style.height = h + 'px';
+      drawDistribution(distCanvas, m, mf.genome);
+      attachDistributionClickHandler(distCanvas, m);
+    });
+  }
+
+  // Panels rendern
+  updatePanels(m);
+}
+
+// ---------- v0.3.1: GC-Skew + Genom-Distribution ----------
+// GC-Skew = (G - C) / (G + C) pro Sliding-Window
+// Speichert ein Array von { center, value }
+function computeGCSkew(tb, windowSize, step) {
+  const total = tb.length;
+  const data = tb.data;
+  const out = [];
+  // Schnellere Berechnung: laufender Counter über Window
+  // Initial-Window
+  let g = 0, c = 0;
+  const w = Math.min(windowSize, total);
+  for (let i = 0; i < w; i++) {
+    const bits = (data[i >> 2] >> ((3 - (i & 3)) * 2)) & 0x3;
+    if (bits === 1) c++;       // C
+    else if (bits === 2) g++;  // G
+  }
+  // Erstes Datenpunkt
+  out.push({ center: Math.floor(w / 2), value: (g + c) > 0 ? (g - c) / (g + c) : 0 });
+  // Schiebe das Fenster vorwärts in Schritten von 'step'
+  for (let start = step; start + w <= total; start += step) {
+    // Entferne 'step' Basen vom linken Rand, füge 'step' am rechten Rand hinzu
+    for (let k = 0; k < step; k++) {
+      const leftIdx = start - step + k;
+      const lb = (data[leftIdx >> 2] >> ((3 - (leftIdx & 3)) * 2)) & 0x3;
+      if (lb === 1) c--; else if (lb === 2) g--;
+      const rightIdx = start + w - step + k;
+      const rb = (data[rightIdx >> 2] >> ((3 - (rightIdx & 3)) * 2)) & 0x3;
+      if (rb === 1) c++; else if (rb === 2) g++;
+    }
+    out.push({ center: start + Math.floor(w / 2), value: (g + c) > 0 ? (g - c) / (g + c) : 0 });
+  }
+  return out;
+}
+
+// Treffer-Histogramm: Bucket-Counts über Genom
+function computeHitHistogram(hits, genomeLen, numBuckets) {
+  const buckets = new Uint32Array(numBuckets);
+  if (genomeLen <= 0) return { buckets, bucketSize: 0 };
+  const bucketSize = genomeLen / numBuckets;
+  for (const h of hits) {
+    const center = (h.start + h.end) / 2;
+    let idx = Math.floor(center / bucketSize);
+    if (idx >= numBuckets) idx = numBuckets - 1;
+    if (idx < 0) idx = 0;
+    buckets[idx]++;
+  }
+  return { buckets, bucketSize };
+}
+
+// Distribution-Canvas-Renderer
+// Zeichnet drei Spuren: GC-Skew, Treffer-Striche, Treffer-Dichte
+function drawDistribution(canvas, motif, genome) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const cssW = canvas.width / dpr;
+  const cssH = canvas.height / dpr;
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const genomeLen = genome.length;
+  const bp2px = (bp) => (bp / genomeLen) * cssW;
+
+  // Spur-Höhen
+  const skewH = 25;
+  const ticksH = 10;
+  const histH = cssH - skewH - ticksH - 6;  // 6 px für Trenner
+
+  // === Spur 1: GC-Skew ===
+  const skewData = genome.gcSkew || [];
+  if (skewData.length > 1) {
+    // Y-Skala: max abs(value) bestimmen, mit Default ±0.3
+    let maxAbs = 0.3;
+    for (const p of skewData) { const a = Math.abs(p.value); if (a > maxAbs) maxAbs = a; }
+    const skewMid = skewH / 2;
+    // Nulllinie
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, skewMid); ctx.lineTo(cssW, skewMid); ctx.stroke();
+    // Linie
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    let first = true;
+    for (const p of skewData) {
+      const x = bp2px(p.center);
+      const y = skewMid - (p.value / maxAbs) * (skewH / 2 - 1);
+      if (first) { ctx.moveTo(x, y); first = false; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    // Y-Achsen-Beschriftung
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '8px ui-monospace, monospace';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText('GC-Skew  ±' + maxAbs.toFixed(2), 4, 1);
+  }
+
+  // === Spur 2: Treffer-Striche ===
+  const ticksY = skewH + 2;
+  const r = motif.results;
+  if (r) {
+    const filtered = r.filterIntergenicOnly ? r.hits.filter(h => !h.intragenic) : r.hits;
+    // Höhe nach Score skalieren
+    let maxScore = 1;
+    for (const h of filtered) if (h.maxScore > maxScore) maxScore = h.maxScore;
+    ctx.fillStyle = motif.color;
+    ctx.globalAlpha = 0.85;
+    for (const h of filtered) {
+      const cx = bp2px((h.start + h.end) / 2);
+      const scoreFrac = (h.score || 1) / maxScore;
+      const tickH = Math.max(2, ticksH * scoreFrac);
+      ctx.fillRect(cx - 0.5, ticksY + (ticksH - tickH), 1, tickH);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // === Spur 3: Treffer-Dichte (Histogramm) ===
+  const histY = skewH + ticksH + 6;
+  if (r) {
+    const filtered = r.filterIntergenicOnly ? r.hits.filter(h => !h.intragenic) : r.hits;
+    const numBuckets = Math.min(200, Math.max(50, Math.floor(cssW / 4)));
+    const { buckets, bucketSize } = computeHitHistogram(filtered, genomeLen, numBuckets);
+    let maxCount = 0;
+    for (const c of buckets) if (c > maxCount) maxCount = c;
+    if (maxCount > 0) {
+      const barW = cssW / numBuckets;
+      // Gedimmte Motiv-Farbe
+      ctx.fillStyle = motif.color;
+      ctx.globalAlpha = 0.5;
+      for (let i = 0; i < numBuckets; i++) {
+        const c = buckets[i];
+        if (c === 0) continue;
+        const h = (c / maxCount) * histH;
+        ctx.fillRect(i * barW, histY + (histH - h), Math.max(1, barW - 0.5), h);
+      }
+      ctx.globalAlpha = 1;
+      // Beschriftung max
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.font = '8px ui-monospace, monospace';
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      ctx.fillText('Dichte  max ' + maxCount + '/' + Math.round(bucketSize / 1000) + 'kb', 4, histY + 1);
+    }
+  }
+
+  // Genom-Skala unten — diskrete Marken bei 0, ¼, ½, ¾, Ende
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.font = '8px ui-monospace, monospace';
+  ctx.textBaseline = 'bottom';
+  for (let i = 0; i <= 4; i++) {
+    const bp = (genomeLen * i) / 4;
+    const x = bp2px(bp);
+    const lbl = bp >= 1000000 ? (bp / 1000000).toFixed(1) + ' Mb' : Math.round(bp / 1000) + ' kb';
+    ctx.textAlign = (i === 0) ? 'left' : (i === 4) ? 'right' : 'center';
+    ctx.fillText(lbl, Math.max(2, Math.min(cssW - 2, x)), cssH - 1);
+  }
+}
+
+// Click-to-jump: Genom-Position zur nächsten Treffer-Position in Tabelle springen
+function attachDistributionClickHandler(canvas, motif) {
+  canvas.addEventListener('click', (e) => {
+    if (!motif.results) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const fraction = x / rect.width;
+    const targetBp = mf.genome.length * fraction;
+    // Nächsten Treffer suchen
+    const filtered = motif.results.filterIntergenicOnly
+      ? motif.results.hits.filter(h => !h.intragenic)
+      : motif.results.hits;
+    let bestIdx = -1, bestDist = Infinity;
+    for (let i = 0; i < filtered.length; i++) {
+      const center = (filtered[i].start + filtered[i].end) / 2;
+      const d = Math.abs(center - targetBp);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    if (bestIdx === -1) return;
+    // Hit in Tabelle: scroll zur Position
+    // Wir suchen das tr-Element mit data-hkey = hitKey des best-Hits
+    const root = document.getElementById('results_' + motif.id);
+    if (!root) return;
+    const hk = hitKeyOf(filtered[bestIdx]);
+    const cb = root.querySelector('.row-sel-' + motif.id + '[data-hkey="' + cssEscape(hk) + '"]');
+    if (cb) {
+      const tr = cb.closest('tr');
+      if (tr) {
+        tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Kurz hervorheben
+        tr.style.transition = 'background 0.3s';
+        tr.style.background = 'rgba(122,184,245,0.15)';
+        setTimeout(() => { tr.style.background = ''; }, 1200);
+      }
+    } else {
+      // Treffer ist außerhalb der ersten 1000 sichtbaren Zeilen
+      log('Nächster Treffer bei Pos ' + Math.round((filtered[bestIdx].start + filtered[bestIdx].end)/2).toLocaleString('de-DE') + ' liegt außerhalb der angezeigten Tabelle (Top 1000)', 'warn');
+    }
+  });
+}
+function cssEscape(s) {
+  // Einfaches Escapen für Attribut-Selektoren
+  return s.replace(/(["\\\]])/g, '\\$1');
+}
+
+// Stabiler Schlüssel für einen Treffer (für Selektion)
+function hitKeyOf(h) {
+  return h.start + ':' + h.end + ':' + h.strand + ':' + ((h.spacers || []).join(','));
+}
+
+// Auswahl der zu rendernden Panels: Selektion (alle), sonst Top N nach aktueller Sortierung
+function pickPanelHits(m) {
+  const r = m.results;
+  if (!r) return [];
+  const filtered = r.filterIntergenicOnly ? r.hits.filter(h => !h.intragenic) : r.hits;
+  const PANEL_DEFAULT = 10;
+  if (r.selected && r.selected.size > 0) {
+    return filtered.filter(h => r.selected.has(hitKeyOf(h)));
+  }
+  return filtered.slice(0, PANEL_DEFAULT);
+}
+
+// Panel-Liste aktualisieren
+function updatePanels(m) {
+  const list = document.getElementById('panel_list_' + m.id);
+  if (!list || list.classList.contains('hidden')) {
+    if (list) {
+      const title = document.getElementById('panels_title_' + m.id);
+      const r = m.results; const sel = r.selected ? r.selected.size : 0;
+      if (title) title.textContent = sel > 0 ? 'Panels (' + sel + ' selektiert, eingeklappt)' : 'Panels (eingeklappt)';
+    }
+    return;
+  }
+  const hits = pickPanelHits(m);
+  const title = document.getElementById('panels_title_' + m.id);
+  if (title) {
+    const r = m.results; const sel = r.selected ? r.selected.size : 0;
+    title.textContent = sel > 0
+      ? 'Panels (' + sel + ' selektiert)'
+      : 'Panels (Top ' + hits.length + ' nach aktueller Sortierung)';
+  }
+  list.innerHTML = '';
+
+  if (hits.length === 0) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--fg-mute);font-size:11px">Keine Treffer auswählbar</div>';
+    return;
+  }
+
+  // Schwebender Maßstab: einmal pro Liste, oben rechts
+  // Wert wird basierend auf Flanke berechnet (alle Panels haben gleiche Flanke)
+  const scaleEl = document.createElement('div');
+  scaleEl.className = 'scale-floating';
+  list.appendChild(scaleEl);
+
+  // Pro Treffer ein Panel-Canvas
+  const PANEL_HEIGHT = 44;  // so niedrig wie möglich
+  for (const h of hits) {
+    const row = document.createElement('div');
+    row.className = 'panel-row';
+    row.style.height = PANEL_HEIGHT + 'px';
+    const canvas = document.createElement('canvas');
+    canvas.height = PANEL_HEIGHT * (window.devicePixelRatio || 1);
+    row.appendChild(canvas);
+    const label = document.createElement('div');
+    label.className = 'panel-label';
+    label.textContent = h.start.toLocaleString('de-DE') + ' ' + (h.strand === 1 ? '+' : '−') +
+                        (h.nearestGene ? '  ' + h.nearestGene : '');
+    row.appendChild(label);
+    list.appendChild(row);
+
+    // Canvas-Größe nach DOM-Insertion setzen, dann zeichnen
+    requestAnimationFrame(() => {
+      const w = row.clientWidth;
+      canvas.width = w * (window.devicePixelRatio || 1);
+      canvas.style.width = w + 'px';
+      canvas.style.height = PANEL_HEIGHT + 'px';
+      drawPanel(canvas, h, m, scaleEl);
+    });
+  }
+}
+
+// ---------- Canvas-Renderer für ein einzelnes Panel ----------
+function drawPanel(canvas, hit, motif, scaleEl) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const cssW = canvas.width / dpr;
+  const cssH = canvas.height / dpr;
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  // Flanke berechnen: Anker = Treffer-Mitte, Fenster = max(3 Gene, 500 bp)
+  const FLANK_GENES = 3;
+  const FLANK_BP_MIN = 500;
+  const anchor = Math.round((hit.start + hit.end) / 2);
+
+  // Genomlänge
+  const genomeLen = mf.genome.length;
+
+  // Suche links und rechts N Gene um den Anker
+  const genes = mf.genome.geneIndex;
+  // binär findet nicht so leicht, linear ist okay bei wenigen tausend
+  let leftGeneIdx = -1, rightGeneIdx = -1;
+  for (let i = 0; i < genes.length; i++) {
+    if (genes[i].end < anchor) leftGeneIdx = i;
+    else if (rightGeneIdx === -1 && genes[i].start > anchor) { rightGeneIdx = i; break; }
+    else if (genes[i].start <= anchor && genes[i].end >= anchor) {
+      // Gen überlappt mit Anker — gilt als sowohl links als rechts
+      leftGeneIdx = i;
+      rightGeneIdx = i + 1; break;
+    }
+  }
+  // N Gene links/rechts vom Anker
+  let leftBound = Math.max(1, anchor - FLANK_BP_MIN);
+  let rightBound = Math.min(genomeLen, anchor + FLANK_BP_MIN);
+  if (leftGeneIdx >= 0) {
+    const targetIdx = Math.max(0, leftGeneIdx - FLANK_GENES + 1);
+    leftBound = Math.min(leftBound, genes[targetIdx].start);
+  }
+  if (rightGeneIdx >= 0 && rightGeneIdx < genes.length) {
+    const targetIdx = Math.min(genes.length - 1, rightGeneIdx + FLANK_GENES - 1);
+    rightBound = Math.max(rightBound, genes[targetIdx].end);
+  }
+  leftBound = Math.max(1, leftBound);
+  rightBound = Math.min(genomeLen, rightBound);
+
+  const winSize = rightBound - leftBound + 1;
+  const bp2px = (bp) => ((bp - leftBound) / winSize) * cssW;
+
+  // Update-Maßstab — wir zeigen den Wert aus dem ersten gerenderten Panel
+  // (alle haben gleiche Flanke, daher gleicher Maßstab)
+  if (scaleEl && !scaleEl._set) {
+    setScale(scaleEl, cssW, winSize);
+    scaleEl._set = true;
+  }
+
+  // ---------- Zeichnen ----------
+  // Hintergrund leicht
+  ctx.fillStyle = 'rgba(255,255,255,0.02)';
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  // Mittellinie sehr dezent
+  const midY = cssH / 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(cssW, midY); ctx.stroke();
+
+  // Gene zeichnen (Pfeile)
+  const geneH = 12;
+  const arrowLen = 5;
+  // Genfilter: nur die im Fenster
+  for (const g of genes) {
+    if (g.end < leftBound || g.start > rightBound) continue;
+    const gx0 = bp2px(Math.max(g.start, leftBound));
+    const gx1 = bp2px(Math.min(g.end, rightBound));
+    const gw = Math.max(2, gx1 - gx0);
+    const gy = midY - geneH / 2;
+    // Pfeilform: Box mit Spitze in Strang-Richtung
+    const fillColor = g.strand === 1 ? 'rgba(122,184,245,0.55)' : 'rgba(255,183,77,0.55)';
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = g.strand === 1 ? 'rgba(122,184,245,0.9)' : 'rgba(255,183,77,0.9)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (g.strand === 1) {
+      // → Spitze rechts
+      const tipLen = Math.min(arrowLen, gw / 2);
+      ctx.moveTo(gx0, gy);
+      ctx.lineTo(gx1 - tipLen, gy);
+      ctx.lineTo(gx1, gy + geneH / 2);
+      ctx.lineTo(gx1 - tipLen, gy + geneH);
+      ctx.lineTo(gx0, gy + geneH);
+      ctx.closePath();
+    } else {
+      // ← Spitze links
+      const tipLen = Math.min(arrowLen, gw / 2);
+      ctx.moveTo(gx1, gy);
+      ctx.lineTo(gx0 + tipLen, gy);
+      ctx.lineTo(gx0, gy + geneH / 2);
+      ctx.lineTo(gx0 + tipLen, gy + geneH);
+      ctx.lineTo(gx1, gy + geneH);
+      ctx.closePath();
+    }
+    ctx.fill(); ctx.stroke();
+
+    // Gen-Name wenn Platz
+    if (gw > 30) {
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.font = '9px ui-monospace, monospace';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      const name = g.name || '?';
+      const tx = gx0 + 3;
+      ctx.fillText(name, tx, midY);
+    }
+  }
+
+  // Motiv-Marker zeichnen — alle nicht-gemuteten Motive die einen Treffer im Fenster haben
+  // Marker liegen ÜBER der Gen-Spur (mid - geneH - paddingMarker)
+  const markerY = midY - geneH / 2 - 5;
+  const markerH = 4;
+  for (const otherMotif of motifs) {
+    if (otherMotif.muted) continue;
+    if (!otherMotif.results) continue;
+    for (const oh of otherMotif.results.hits) {
+      if (oh.end < leftBound || oh.start > rightBound) continue;
+      const x0 = bp2px(Math.max(oh.start, leftBound));
+      const x1 = bp2px(Math.min(oh.end, rightBound));
+      const w = Math.max(2, x1 - x0);
+      // Treffer des aktuellen Motivs am Anker hervorheben
+      const isAnchorHit = (otherMotif.id === motif.id) && oh.start === hit.start && oh.end === hit.end;
+      ctx.fillStyle = otherMotif.color;
+      ctx.globalAlpha = isAnchorHit ? 1.0 : 0.85;
+      ctx.fillRect(x0, markerY - markerH / 2, w, markerH);
+      // Strang-Indikator: kleiner Pfeil/Strich oben oder unten
+      ctx.fillStyle = otherMotif.color;
+      ctx.beginPath();
+      if (oh.strand === 1) {
+        ctx.moveTo(x1, markerY - markerH / 2);
+        ctx.lineTo(x1 + 3, markerY);
+        ctx.lineTo(x1, markerY + markerH / 2);
+      } else {
+        ctx.moveTo(x0, markerY - markerH / 2);
+        ctx.lineTo(x0 - 3, markerY);
+        ctx.lineTo(x0, markerY + markerH / 2);
+      }
+      ctx.closePath();
+      ctx.fill();
+      // Hervorhebung des aktuellen Treffers: kleiner Rahmen
+      if (isAnchorHit) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x0 - 0.5, markerY - markerH / 2 - 0.5, w + 1, markerH + 1);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Anker-Markierung: dünne Linie vom Marker bis Mid
+  const ax = bp2px(anchor);
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 2]);
+  ctx.beginPath();
+  ctx.moveTo(ax, 0);
+  ctx.lineTo(ax, cssH);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// Maßstab setzen: nice number, passend zur Fenstergröße
+function setScale(el, pxWidth, bpWindow) {
+  // Ziel: ein Balken von ~120-180 px Breite
+  const targetPx = 140;
+  const bpPerPx = bpWindow / pxWidth;
+  const targetBp = bpPerPx * targetPx;
+  // nice number nach 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, ...
+  const niceSteps = [1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000,100000,200000,500000];
+  let chosen = niceSteps[0];
+  for (const s of niceSteps) { if (s <= targetBp) chosen = s; }
+  const barPx = chosen / bpPerPx;
+  el.innerHTML = '';
+  const bar = document.createElement('span');
+  bar.className = 'scale-bar';
+  bar.style.width = barPx + 'px';
+  el.appendChild(bar);
+  const lbl = document.createElement('span');
+  lbl.textContent = chosen >= 1000 ? (chosen / 1000) + ' kb' : chosen + ' bp';
+  el.appendChild(lbl);
+}
+
+function sortHits(r) {
+  const dir = r.sortDir === 'asc' ? 1 : -1;
+  const k = r.sortBy;
+  r.hits.sort((a, b) => {
+    let av, bv;
+    // Spacer-Spalten: spacer_0, spacer_1, ...
+    if (k && k.startsWith('spacer_')) {
+      const idx = parseInt(k.substring(7), 10);
+      av = (a.spacers && a.spacers[idx] !== undefined) ? a.spacers[idx] : Infinity;
+      bv = (b.spacers && b.spacers[idx] !== undefined) ? b.spacers[idx] : Infinity;
+    } else {
+      av = a[k]; bv = b[k];
+    }
+    if (av === null || av === undefined) av = (typeof bv === 'number') ? Infinity : '';
+    if (bv === null || bv === undefined) bv = (typeof av === 'number') ? Infinity : '';
+    if (typeof av === 'string') return av.localeCompare(bv) * dir;
+    return (av - bv) * dir;
+  });
+}
+
+// Sequenz-Coloring mit Block-Awareness:
+// - Submotive in Base-Farben mit Mismatch-Highlight
+// - Spacer-Basen in vollem Inhalt, grau-kursiv, gepaddet auf max-Range zentriert
+function colorizeBlockSequence(hit, blocks) {
+  if (!blocks) return colorizeSequenceFlat(hit.sequence);
+
+  let out = '';
+  let pos = 0;       // Position in hit.sequence
+  let spacerIdx = 0; // Welcher Spacer kommt als nächstes
+
+  for (const b of blocks) {
+    if (b.type === 'fixed') {
+      const L = b.seq.length;
+      for (let i = 0; i < L; i++) {
+        const base = (hit.sequence[pos + i] || 'N').toUpperCase();
+        const cls = 'b-' + (['A','C','G','T','N'].includes(base) ? base : 'N');
+        const allowed = IUPAC[b.seq[i]] || ['A','C','G','T'];
+        const isMatch = allowed.includes(base);
+        out += '<span class="seq-base ' + cls + (isMatch ? '' : ' mismatch') + '">' + base + '</span>';
+      }
+      pos += L;
+    } else {
+      // Spacer-Block: tatsächliche Länge aus hit.spacers, Padding auf b.max
+      const len = (hit.spacers && hit.spacers[spacerIdx] !== undefined) ? hit.spacers[spacerIdx] : b.min;
+      spacerIdx++;
+      const totalPad = b.max - len;
+      const padLeft = Math.floor(totalPad / 2);
+      const padRight = totalPad - padLeft;
+
+      // Trennzeichen vorm Spacer-Block (visuelle Klarheit)
+      out += '<span class="spacer-pad"> </span>';
+      // Padding links
+      if (padLeft > 0) out += '<span class="spacer-pad">' + '·'.repeat(padLeft) + '</span>';
+      // Spacer-Inhalt (lowercase, kursiv-grau)
+      let spacerContent = '';
+      for (let i = 0; i < len; i++) {
+        const base = (hit.sequence[pos + i] || 'n').toLowerCase();
+        spacerContent += base;
+      }
+      out += '<span class="spacer-base">' + spacerContent + '</span>';
+      // Padding rechts
+      if (padRight > 0) out += '<span class="spacer-pad">' + '·'.repeat(padRight) + '</span>';
+      out += '<span class="spacer-pad"> </span>';
+
+      pos += len;
+    }
+  }
+  return out;
+}
+
+function colorizeSequenceFlat(seq) {
+  let out = '';
+  for (let i = 0; i < seq.length; i++) {
+    const b = seq[i].toUpperCase();
+    const cls = 'b-' + (['A','C','G','T','N'].includes(b) ? b : 'N');
+    out += '<span class="seq-base ' + cls + '">' + b + '</span>';
+  }
+  return out;
+}
+
+// ---------- Tooltips ----------
+const TOOLTIPS = {
+  motiv: { title: 'Motiv', body: 'DNA-Sequenz-Muster (Konsensus oder Matrix), nach dem im Genom gesucht wird. Bindestellen für Regulatoren, Ribosomenbindungsstellen, Promotor-Boxen sind typische Beispiele.' },
+  konsensus: { title: 'Konsensus', body: 'Idealsequenz eines Motivs in IUPAC-Notation. Repräsentiert die häufigste Base pro Position oder eine Gruppe erlaubter Basen (z.B. R = A oder G).\n\nVariable Spacer:\nCGTTTT N12-16 GGGWAW bedeutet: Submotiv 1, dann 12–16 beliebige Basen, dann Submotiv 2.\n\nSchreibweisen für Spacer (alle gleichbedeutend):\nN12-16  oder  N12..16  oder  N{12,16}  oder  N12 (fester Abstand).\n\nLeerzeichen optional zur visuellen Trennung. Mehrere Spacer pro Konsensus erlaubt.' },
+  iupac: { title: 'IUPAC', body: 'Standard-Code für Mehrdeutigkeit in DNA-Sequenzen. R=A/G, Y=C/T, N=alle, etc. Siehe Legende über der Eingabe.' },
+  mismatches: { title: 'Mismatches', body: 'Erlaubte Abweichungen vom Konsensus. Bei 2 Mismatches werden Treffer mit bis zu 2 nicht-passenden Positionen akzeptiert. Höhere Mismatch-Zahl erhöht Treffer-Anzahl exponentiell.' },
+  strang: { title: 'Strang', body: 'DNA-Doppelstrang: + (Sense) und − (Antisense). Bei "beide" wird auch das Reverse-Complement gesucht. Palindromische Motive ergeben dann einen Treffer mit Flag (pal).' },
+  zufall: { title: 'Zufallserwartung', body: 'Wieviele Treffer rein zufällig erwartet würden, basierend auf der Genom-Komposition (A/C/G/T-Häufigkeiten) und der Motiv-Spezifität. Hilft einzuschätzen ob das Motiv spezifisch genug ist.' },
+  anreicherung: { title: 'Anreicherung / Verarmung', body: 'Verhältnis tatsächlich gefundener Treffer zur Zufallserwartung. >1 = häufiger als zufällig (Anreicherung), <1 = seltener (Verarmung). Starke Verarmung kann auf Selektion gegen das Motiv hinweisen, z.B. Restriktions-Schnittstellen-Vermeidung.' },
+  zscore: { title: 'Z-Score', body: 'Standardisierte Abweichung von der Erwartung. (Beobachtet − Erwartet) / √Erwartet. |Z|>2 deutet auf signifikante Abweichung, |Z|>5 stark signifikant. Bei sehr großen Genomen werden auch kleine Effekte hoch-Z, deshalb mit Anreicherungs-Verhältnis kombiniert betrachten.' },
+  distance: { title: 'Distanz zum Gen-Start', body: 'Abstand vom Treffer zum Start des nächstgelegenen Gens, in bp. Negativ = upstream (typisch für Promotor-Region), 0 = am Start, positiv = innerhalb oder downstream des Gens.' }
+};
+
+let activeTooltipTrigger = null;
+
+function setupTooltips() {
+  const box = document.getElementById('tooltip-box');
+  const close = document.getElementById('tt-close');
+
+  document.addEventListener('click', (e) => {
+    const trigger = e.target.closest('.info-icon');
+    if (trigger) {
+      e.stopPropagation();
+      const key = trigger.dataset.tt;
+      if (!key) return;
+      if (activeTooltipTrigger === trigger) {
+        hideTooltip();
+        return;
+      }
+      showTooltip(trigger, key);
+    } else if (!e.target.closest('#tooltip-box')) {
+      hideTooltip();
+    }
+  });
+
+  close.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideTooltip();
+  });
+
+  // Desktop: Hover
+  document.addEventListener('mouseover', (e) => {
+    const trigger = e.target.closest('.info-icon');
+    if (trigger && trigger !== activeTooltipTrigger) {
+      const key = trigger.dataset.tt;
+      if (key && TOOLTIPS[key]) {
+        clearTimeout(window._ttHoverTimeout);
+        window._ttHoverTimeout = setTimeout(() => showTooltip(trigger, key), 250);
+      }
+    }
+  });
+  document.addEventListener('mouseout', (e) => {
+    const trigger = e.target.closest('.info-icon');
+    if (trigger) clearTimeout(window._ttHoverTimeout);
+  });
+}
+
+function showTooltip(trigger, key) {
+  const tt = TOOLTIPS[key];
+  if (!tt) return;
+  const box = document.getElementById('tooltip-box');
+  document.getElementById('tt-title-text').textContent = tt.title;
+  document.getElementById('tt-body').textContent = tt.body;
+  box.classList.add('show');
+
+  // Position berechnen — bevorzugt unterhalb, sonst oberhalb
+  const r = trigger.getBoundingClientRect();
+  box.style.left = '0px'; box.style.top = '0px'; // reset für Messung
+  const bb = box.getBoundingClientRect();
+  let left = r.left + r.width / 2 - bb.width / 2;
+  let top = r.bottom + 8;
+  if (top + bb.height > window.innerHeight - 10) {
+    top = r.top - bb.height - 8;
+  }
+  if (left < 10) left = 10;
+  if (left + bb.width > window.innerWidth - 10) left = window.innerWidth - bb.width - 10;
+  box.style.left = left + 'px';
+  box.style.top = top + 'px';
+
+  if (activeTooltipTrigger) activeTooltipTrigger.classList.remove('active');
+  trigger.classList.add('active');
+  activeTooltipTrigger = trigger;
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip-box').classList.remove('show');
+  if (activeTooltipTrigger) activeTooltipTrigger.classList.remove('active');
+  activeTooltipTrigger = null;
+}
+
+// ---------- Init v0.2 ----------
+renderIupacLegend();
+setupTooltips();
+document.getElementById('add-motif-btn').addEventListener('click', () => addMotif());
+
+// API für Konsole erweitern
+window.mf.scanMotif = scanMotif;
+window.mf.motifs = () => motifs;
+window.mf._internal.computeComposition = computeComposition;
+window.mf._internal.expectedHitsForMotif = expectedHitsForMotif;
+window.mf._internal.runScan = runScan;
+window.mf._internal.classifyHit = classifyHit;
+
+log('Motif Finder ' + VERSION + ' bereit. ?debug für Eruda, Debug-Panel unten rechts.', 'info');
+</script>
+
+</body>
+</html>
